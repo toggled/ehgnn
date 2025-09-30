@@ -1,1 +1,1 @@
-# ehgnn
+# Code for the paper: EdgeMask-HGNN: Learning to Sparsify Hypergraphs for Scalable Node Classification in Hypergraph Neural Networks
