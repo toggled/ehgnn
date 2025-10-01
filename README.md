@@ -7,7 +7,7 @@ How to run
 - The source codes are in src/ directory. Run them from src/.
 > cd src/
 
-- Running EHGNN-F, EHGNN-C, HypNeuralSparse, Random, Degdist, and Spectral
+- Running EHGNN-F, EHGNN-C, EHGNN-F w/ cond, EHGNN-C w/ cond, Random, Degdist, and Spectral
 
 > ./run.sh
 
