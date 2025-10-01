@@ -1,0 +1,6 @@
+array1=('ufg_n0.3' 'ufg_n0.4' 'ufg_n0.8' 'ufg_n0.9')
+for dataset in "${array1[@]}"; do
+    python train_sparse.py --method HGNN --dname $dataset --All_num_layers 1 --MLP_num_layers 2 --feature_noise 0.0 --heads 1 --Classifier_num_layers 1 --MLP_hidden 512 --Classifier_hidden 256 --wd 0.0 --epochs 500 --runs 5 --cuda 0 --lr 0.0005 --perturb_type replace --perturb_prop 0 --seed 1 --mode learnmask 
+    python train_sparse.py --method HGNN --dname $dataset --All_num_layers 1 --MLP_num_layers 2 --feature_noise 0.0 --heads 1 --Classifier_num_layers 1 --MLP_hidden 512 --Classifier_hidden 256 --wd 0.0 --epochs 500 --runs 5 --cuda 0 --lr 0.0005 --perturb_type replace --perturb_prop 0 --seed 1 --mode full 
+    python train_sparse.py --method HGNN --dname $dataset --All_num_layers 1 --MLP_num_layers 2 --feature_noise 0.0 --heads 1 --Classifier_num_layers 1 --MLP_hidden 512 --Classifier_hidden 256 --wd 0.0 --epochs 500 --runs 5 --cuda 0 --lr 0.0005 --perturb_type replace --perturb_prop 0 --seed 1 --mode learnmask+  
+done 
