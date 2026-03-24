@@ -1,35 +1,13 @@
 #!/bin/bash
 
 array1=('cora' 'yelp' 'ModelNet40' 'NTU2012' 'coauthor_cora' 'house-committees' 'citeseer' 'pubmed' 'actor' 'pokec' 'twitch' '20newsW100' 'walmart-trips' 'coauthor_dblp' 'Mushroom' 'trivago')
-# array1=('cora' 'yelp' 'ModelNet40' 'NTU2012' 'coauthor_cora' 'house-committees' 'citeseer' 'pubmed' 'actor' 'pokec' 'trivago')
-# hid=(32 16 16 16 8 8 16 31 16 32 16 8 32 16 1024)
-# array1=('trivago' 'walmart-trips')
-# for dataset in "${array1[@]}"; do
-# array1=('pokec')
-k=0.3
-savef='tmlr_final_0.3.csv'
-# savef='tmlr_final_yelponly.csv'
-# savef='memfix_0.5_tmlrtmp.csv'
-# savef='hslvsours.csv'
-# savef='condLR.csv'
-# savef='membreakdown.csv'
+
+k=0.5
+savef='tmlr_final.csv'
 for i in {1..16}; do
     dataset=${array1[i-1]}
     # h=${hid[i-1]}
     FREE_GPUS=(0 1 2 3)
-    # while [ ${#FREE_GPUS[@]} -le 1 ]; do
-    #     for j in {0..3}; do
-    #         if ! nvidia-smi -i $j | grep -qi "python"; then
-    #             FREE_GPUS+=($j)
-    #         fi
-
-    #         # stop once we found 2
-    #         if [ ${#FREE_GPUS[@]} -eq 1 ]; then
-    #             break
-    #         fi
-    #     done
-    # done
-    # echo "Using GPUs: ${FREE_GPUS[@]} for dataset $dataset"
     if [[ "$dataset" == "trivago" ]]; then
         h=512
         python train_sparse.py --method HGNN --dname $dataset --All_num_layers 3 --MLP_num_layers 2 --feature_noise 0.0 --heads 1 --Classifier_num_layers 1 --MLP_hidden $h --Classifier_hidden 256 --wd 0.0 --epochs 2000 --runs 5 --lr 0.005 --perturb_type replace --perturb_prop 0 --seed 1 --mode NeuralF --keep_ratio $k --fname $savef  --cuda ${FREE_GPUS[0]} --theory &

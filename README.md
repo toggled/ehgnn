@@ -5,7 +5,7 @@ Datasets shared here: [google drive link](https://drive.google.com/file/d/1-wyCT
 How to run
 --------
 
-- Running EHGNN-F, EHGNN-C, EHGNN-F w/ cond, EHGNN-C w/ cond, Random, Degdist, and Spectral
+- Running EHGNN-F, EHGNN-C, EHGNN-F w/ cond, EHGNN-C w/ cond, Random, Edgedeg, and Spectral
 
 > ./tmlrrun.sh
 
