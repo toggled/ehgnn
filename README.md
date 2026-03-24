@@ -4,17 +4,21 @@ Datasets shared here: [google drive link](https://drive.google.com/file/d/1-wyCT
 
 How to run
 --------
-- The source codes are in src/ directory. Run them from src/.
-> cd src/
 
 - Running EHGNN-F, EHGNN-C, EHGNN-F w/ cond, EHGNN-C w/ cond, Random, Degdist, and Spectral
 
-> ./run.sh
+> ./tmlrrun.sh
 
-- Running AllSetTransformer+EHGNN-F, CEGAT+EHGNN-F and CEGCN+EHGNN-F
+- Running Link prediction experiments
+
+> cd Hyper-SAGNN-master
+
+> ./runall.sh
+
+- Running AllSetTransformer+EHGNN-F, ED-HNN+EHGNN-F and HyperUFG+EHGNN-F
 
 > ./others.sh
 
-- Running synthetic heterophilic datasets.
+- Running HSL baseline
 
-> ./run_het.sh
+> ./hsl.sh
