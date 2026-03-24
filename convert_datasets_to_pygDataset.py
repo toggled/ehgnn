@@ -34,6 +34,8 @@ def save_data_to_pickle(data, p2root = '../data/', file_name = None):
     with open(p2he_StarExpan, 'bw') as f:
         pickle.dump(data, f)
     return p2he_StarExpan
+def is_syn_family_name(dname: str) -> bool:
+    return isinstance(dname, str) and (dname.startswith("syn_family_") or dname.startswith("synfamily_"))
 
 
 class dataset_Hypergraph(InMemoryDataset):
@@ -47,9 +49,10 @@ class dataset_Hypergraph(InMemoryDataset):
                             'NTU2012', 'Mushroom', 
                             'coauthor_cora', 'coauthor_dblp',
                             'yelp', 'amazon-reviews', 'walmart-trips', 'house-committees',
-                            'walmart-trips-100', 'house-committees-100','syn',
-                            'cora', 'citeseer', 'pubmed','actor','pokec','twitch','amazon']
-        if name not in existing_dataset:
+                            'walmart-trips-100', 'house-committees-100','syn','syn_coherent','syn_core_decoy','syn_incidence_favoured_v3',
+                            'ufg_n0.3','ufg_n0.4','ufg_n0.8','ufg_n0.9',
+                            'cora', 'citeseer', 'pubmed','actor','pokec','twitch','amazon','ogbn-mag', 'trivago']
+        if (name not in existing_dataset) and (not is_syn_family_name(name)):
             raise ValueError(f'name of hypergraph dataset must be one of: {existing_dataset}')
         else:
             self.name = name
@@ -75,7 +78,7 @@ class dataset_Hypergraph(InMemoryDataset):
         
         super(dataset_Hypergraph, self).__init__(osp.join(root, name), transform, pre_transform)
 
-        
+        print(self.processed_paths[0])
         
         self.data, self.slices = torch.load(self.processed_paths[0],weights_only=False)
         # print(self.processed_paths[0])
@@ -139,6 +142,14 @@ class dataset_Hypergraph(InMemoryDataset):
                         dataset = self.name,
                         feature_noise = self.feature_noise,
                         train_percent = self._train_percent)
+                elif self.name in ['ufg_n0.3','ufg_n0.4','ufg_n0.8','ufg_n0.9']:
+                    if self.feature_noise is None:
+                        raise ValueError(f'for cornell datasets, feature noise cannot be {self.feature_noise}')
+                    tmp_data = load_cornell_dataset(path = self.p2raw,
+                        dataset = self.name,
+                        feature_noise = self.feature_noise,
+                        feature_dim=2,
+                        train_percent = self._train_percent)
                 elif self.name in ['walmart-trips-100', 'house-committees-100']:
                     if self.feature_noise is None:
                         raise ValueError(f'for cornell datasets, feature noise cannot be {self.feature_noise}')
@@ -155,7 +166,11 @@ class dataset_Hypergraph(InMemoryDataset):
                     tmp_data = load_yelp_dataset(path = self.p2raw,
                             dataset = self.name,
                             train_percent = self._train_percent)
-
+                elif self.name in ['ogbn-mag','trivago']:
+                    tmp_data = load_large_dataset(path = self.p2raw,
+                            dataset = self.name,
+                            train_percent = self._train_percent)
+                    print('tmp_data: ',tmp_data)
                 else:
                     tmp_data = load_LE_dataset(path = self.p2raw, 
                                               dataset = self.name,

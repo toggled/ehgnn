@@ -11,6 +11,7 @@ import os
 # from dhg.utils import split_by_ratio
 # from dhg import Hypergraph
 import pandas as pd 
+from itertools import combinations
 
 def plot_results(args,results,root,plot_acc_traj=True):
     loss_meta_trajectory, acc_drop_trajectory, lap_shift_trajectory, lap_dist_trajectory, \
@@ -154,7 +155,7 @@ def degree_sensitivity(H, Z_orig, Z_adv):
 
 # Measure drop in classification accuracy before and after the attack
 # This is the ultimate indicator of the attack's effectiveness
-@torch.no_grad
+@torch.no_grad()
 def classification_drop(args, model, H, HG, X, H_adv, X_adv, labels,W_e = None):
     assert W_e is None
     # print(args.model)
@@ -172,7 +173,7 @@ def classification_drop(args, model, H, HG, X, H_adv, X_adv, labels,W_e = None):
     acc_adv = (logits_adv.argmax(dim=1) == labels).float().mean().item()
     return acc_orig, acc_adv, (acc_orig - acc_adv)/acc_orig
 
-@torch.no_grad
+@torch.no_grad()
 def classification_drop_pois(model, model_pois, H, X, H_adv, X_adv, labels, W_e = None):
     if W_e is None:
         logits_orig = model(X, H)
@@ -224,6 +225,8 @@ def save_to_csv(results, filename='results.csv'):
     if os.path.isfile(filename):
         existing_df = pd.read_csv(filename)
         if not existing_df.columns.equals(df.columns):
+            print('existing columns:', existing_df.columns)
+            print('new columns:', df.columns)
             raise ValueError("Column mismatch between results and existing CSV file.")
     df.to_csv(filename, mode='a', header=not os.path.isfile(filename), index=False)
 
@@ -644,3 +647,215 @@ def canonical_boundary_matrix(H_bin):
 
 def hodge_laplacian_L0(B1):
     return B1 @ B1.T
+
+
+def find_repeated_hyperedges(data):
+    """
+    Detect repeated hyperedges in hypergraph stored in bipartite format [V|E ; E|V].
+
+    Returns:
+        duplicates: dict {canonical_node_tuple: [list of hyperedge_ids]}
+                     Only entries with more than 1 hyperedge are duplicates.
+
+        repeated_hyperedges: list of hyperedge_ids that appear more than once.
+    """
+    edge_index = data.edge_index
+    num_nodes = int(data.n_x)
+    num_hyperedges = int(data.num_hyperedges)
+
+    # Extract the V→E part only
+    # i.e., edges where source is a node (0 .. n_x-1)
+    mask = edge_index[0] < num_nodes
+    V2E = edge_index[:, mask]
+
+    # hyperedges appear in row 1
+    node_ids = V2E[0]
+    hedge_ids = V2E[1]
+
+    # Build adjacency: for each hyperedge, list of nodes
+    hyperedge_to_nodes = {he: [] for he in range(num_nodes, num_nodes + num_hyperedges)}
+
+    for node, he in zip(node_ids.tolist(), hedge_ids.tolist()):
+        hyperedge_to_nodes[he].append(node)
+
+    # Canonicalize sets
+    canonical = {}  # maps canonical node-tuple → list of hyperedges
+    for he, nodes in hyperedge_to_nodes.items():
+        key = tuple(sorted(nodes))  # canonical signature
+        if key not in canonical:
+            canonical[key] = []
+        canonical[key].append(he)
+
+    # Collect duplicates
+    duplicates = {k: v for k, v in canonical.items() if len(v) > 1}
+    
+    # Flatten list
+    repeated_hyperedges = []
+    for v in duplicates.values():
+        repeated_hyperedges.extend(v)
+    print("% duplicate hyperedges: {:.2f}".format(len(duplicates) * 100 / num_hyperedges))
+    return duplicates, repeated_hyperedges
+
+def get_param_and_buffer_memory_bytes(model):
+    param_bytes = 0
+    buffer_bytes = 0
+    for p in model.parameters():
+        if p.requires_grad:
+            param_bytes += p.numel() * p.element_size()
+        else:
+            param_bytes += p.numel() * p.element_size()
+    for b in model.buffers():
+        buffer_bytes += b.numel() * b.element_size()
+    static_model_bytes = param_bytes + buffer_bytes
+    return param_bytes, buffer_bytes, static_model_bytes
+
+def build_incidence(data):
+    """
+    From bipartite edge_index [V|E; E|V], construct:
+      - hyperedge_to_nodes: dict[hyperedge_id] -> list[node_id]
+      - node_to_hyperedges: dict[node_id] -> list[hyperedge_id]
+    """
+    edge_index = data.edge_index
+    num_nodes = data.n_x
+
+    # keep only V→E entries: row0 is node, row1 is hyperedge
+    mask = edge_index[0] < num_nodes
+    node_ids = edge_index[0, mask].tolist()
+    hedge_ids = edge_index[1, mask].tolist()
+
+    hyperedge_to_nodes = {}
+    node_to_hyperedges = {v: [] for v in range(num_nodes)}
+
+    for v, e in zip(node_ids, hedge_ids):
+        hyperedge_to_nodes.setdefault(e, []).append(v)
+        node_to_hyperedges[v].append(e)
+
+    return hyperedge_to_nodes, node_to_hyperedges
+
+def hyperedge_homophily(data):
+    """
+    Definition 1 (Hyperedge Homophily)
+
+    Returns:
+        H_edge: float in [0,1] – average over hyperedges of
+                fraction of node pairs in that hyperedge that share the same label.
+    """
+    y = data.y
+    num_hyperedges = data.num_hyperedges
+    hyperedge_to_nodes, _ = build_incidence(data)
+
+    if num_hyperedges == 0:
+        return float("nan")
+
+    total = 0.0
+    counted_edges = 0
+
+    for e, nodes in hyperedge_to_nodes.items():
+        n_j = len(nodes)
+        if n_j < 2:
+            # C(n_j, 2) = 0, so this hyperedge contributes nothing;
+            # we can skip it in the average.
+            continue
+
+        labels = y[torch.tensor(nodes, device=y.device)]
+        same_pairs = 0
+        total_pairs = 0
+
+        # all unordered node pairs inside this hyperedge
+        for i, j in combinations(range(n_j), 2):
+            total_pairs += 1
+            if labels[i] == labels[j]:
+                same_pairs += 1
+
+        if total_pairs > 0:
+            total += same_pairs / total_pairs
+            counted_edges += 1
+
+    if counted_edges == 0:
+        return float("nan")
+
+    H_edge = total / counted_edges
+    return H_edge
+
+def node_homophily(data):
+    """
+    Definition 2 (Node Homophily)
+
+    Returns:
+        H_node: float in [0,1] – average over nodes of:
+                  (average, over incident hyperedges, of
+                   fraction of other nodes in those hyperedges
+                   that share the same label as the node).
+    """
+    y = data.y
+    num_nodes = data.n_x
+    hyperedge_to_nodes, node_to_hyperedges = build_incidence(data)
+
+    if num_nodes == 0:
+        return float("nan")
+
+    total_over_nodes = 0.0
+    counted_nodes = 0
+
+    for v in range(num_nodes):
+        incident_edges = node_to_hyperedges.get(v, [])
+        if len(incident_edges) == 0:
+            continue  # this node is isolated in the hypergraph
+
+        label_v = y[v]
+        per_edge_scores = []
+        for e in incident_edges:
+            nodes_in_e = hyperedge_to_nodes[e]
+            # other nodes in this hyperedge
+            others = [u for u in nodes_in_e if u != v]
+            n_j = len(others)
+            if n_j == 0:
+                continue  # hyperedge has only v
+
+            labels_others = y[torch.tensor(others, device=y.device)]
+            same = (labels_others == label_v).sum().item()
+            per_edge_scores.append(same / n_j)
+
+        if len(per_edge_scores) == 0:
+            continue
+
+        # average over hyperedges in R_v
+        node_score = sum(per_edge_scores) / len(per_edge_scores)
+        total_over_nodes += node_score
+        counted_nodes += 1
+
+    if counted_nodes == 0:
+        return float("nan")
+
+    H_node = total_over_nodes / counted_nodes
+    return H_node
+
+def average_hyperedge_size(data):
+    hyperedge_to_nodes,_ = build_incidence(data)
+    num_hyperedges = data.num_hyperedges
+
+    if num_hyperedges == 0:
+        return float("nan")
+
+    total = 0
+    for e, nodes in hyperedge_to_nodes.items():
+        total += len(nodes)
+
+    return total / num_hyperedges
+
+def hypergraph_density(data):
+    num_nodes = data.n_x
+    num_hyperedges = data.num_hyperedges
+
+    if num_nodes == 0 or num_hyperedges == 0:
+        return float("nan")
+
+    hyperedge_to_nodes,_ = build_incidence(data)
+
+    # number of incidences = total size of all hyperedges
+    total_incidences = sum(len(nodes) for nodes in hyperedge_to_nodes.values())
+
+    # max possible incidences = |V| * |E|
+    density = total_incidences / (num_nodes * num_hyperedges)
+    return density
+

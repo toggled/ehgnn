@@ -18,6 +18,7 @@ import torch
 import os
 import pickle
 import ipdb
+from pathlib import Path
 
 import os.path as osp
 import numpy as np
@@ -320,20 +321,23 @@ def load_cornell_dataset(path='../data/raw_data/', dataset = 'amazon',
     df_labels = pd.read_csv(osp.join(path, dataset, f'node-labels-{dataset}.txt'), names = ['node_label'])
     num_nodes = df_labels.shape[0]
     labels = df_labels.values.flatten()
+    if dataset.startswith('ufg'):
+        assert feature_dim is not None
+        features = np.random.randn(num_nodes, feature_dim).astype(np.float32)
+    else:
+        # then create node features.
+        num_classes = df_labels.values.max()
+        features = np.zeros((num_nodes, num_classes))
 
-    # then create node features.
-    num_classes = df_labels.values.max()
-    features = np.zeros((num_nodes, num_classes))
+        features[np.arange(num_nodes), labels - 1] = 1
+        if feature_dim is not None:
+            num_row, num_col = features.shape
+            zero_col = np.zeros((num_row, feature_dim - num_col), dtype = features.dtype)
+            features = np.hstack((features, zero_col))
 
-    features[np.arange(num_nodes), labels - 1] = 1
-    if feature_dim is not None:
-        num_row, num_col = features.shape
-        zero_col = np.zeros((num_row, feature_dim - num_col), dtype = features.dtype)
-        features = np.hstack((features, zero_col))
-
-    features = np.random.normal(features, feature_noise, features.shape)
+        features = np.random.normal(features, feature_noise, features.shape)
     print(f'number of nodes:{num_nodes}, feature dimension: {features.shape[1]}')
-
+    
     features = torch.FloatTensor(features)
     labels = torch.LongTensor(labels)
 
@@ -392,6 +396,109 @@ def load_cornell_dataset(path='../data/raw_data/', dataset = 'amazon',
     
     return data
 
+def load_hyperufg_node_homophily_dataset(
+        dataset='ufg_n0.3',
+        base_dir='./HyperUFG/Synthetic Data/Node Homophily',
+        feature_dim=16,
+        train_percent=0.025,
+        seed=1):
+    """
+    Load only the ufg_n* family from HyperUFG/Synthetic Data/Node Homophily/<ratio>.
+    Builds random node features and a bidirectional node-hyperedge incidence edge_index.
+    """
+    assert dataset.startswith('ufg_n'), f'Unexpected dataset: {dataset}'
+
+    ratio = dataset.split('n')[-1]
+    folder = Path(base_dir) / ratio
+    print(f'Loading HyperUFG Node Homophily: {dataset} from {folder}')
+
+    labels = np.load(folder / 'labels.npy', allow_pickle=True).astype(np.int64)
+    hypergraph = np.load(folder / 'hyperedge.npy', allow_pickle=True).item()
+
+    num_nodes = int(labels.shape[0])
+
+    rng = np.random.default_rng(seed)
+    features = rng.standard_normal((num_nodes, feature_dim), dtype=np.float32)
+
+    node_list = []
+    he_list = []
+    he_id = num_nodes
+
+    for _, nodes in sorted(hypergraph.items(), key=lambda kv: kv[0]):
+        nodes = [int(v) for v in nodes]
+        node_list += nodes
+        he_list += [he_id] * len(nodes)
+        he_id += 1
+
+    edge_index = np.array(
+        [node_list + he_list, he_list + node_list],
+        dtype=np.int64,
+    )
+    edge_index = torch.LongTensor(edge_index)
+
+    data = Data(
+        x=torch.FloatTensor(features),
+        edge_index=edge_index,
+        y=torch.LongTensor(labels),
+    )
+
+    total_num_node_id_he_id = int(edge_index.max().item()) + 1
+    data.edge_index, data.edge_attr = coalesce(
+        data.edge_index,
+        None,
+        total_num_node_id_he_id,
+        total_num_node_id_he_id)
+
+    data.n_x = num_nodes
+    data.train_percent = train_percent
+    data.num_hyperedges = he_id - num_nodes
+    print(f'Loaded {dataset}: num_nodes={num_nodes}, num_hyperedges={data.num_hyperedges}, feature_dim={feature_dim}')
+
+    return data
+
+def load_large_dataset(path='../data/raw_data/', dataset = 'trivago', train_percent = 0.0):
+    
+    features = torch.load(osp.join(path,dataset,f'{dataset}_X_vec.pt'))
+
+    # then load node labels:
+    labels = torch.load(osp.join(path,dataset,f'{dataset}_Y.pt'))
+
+    num_nodes, feature_dim = features.shape
+    assert num_nodes == len(labels)
+    print(f'number of nodes:{num_nodes}, feature dimension: {feature_dim}')
+
+    hypergraph = torch.load(osp.join(path,dataset,f'{dataset}_E.pt'))
+
+    num_hyperedges = hypergraph[1].max()+1
+    print(f'number of hyperedges: {hypergraph[1].max()+1}')
+
+    edge_idx = num_nodes
+    hypergraph[1]+=edge_idx 
+    node_list,edge_list = hypergraph[0].tolist(),hypergraph[1].tolist()
+
+    edge_index = np.array([ node_list + edge_list,
+                            edge_list + node_list], dtype = int)
+    
+    edge_index = torch.LongTensor(edge_index)
+
+    data = Data(x = features,
+                edge_index = edge_index,
+                y = labels)
+
+    total_num_node_id_he_id = edge_index.max() + 1
+    data.edge_index, data.edge_attr = coalesce(data.edge_index, 
+            None, 
+            total_num_node_id_he_id, 
+            total_num_node_id_he_id)
+            
+    n_x = num_nodes
+    data.n_x = n_x
+
+    data.train_percent = train_percent
+    data.num_hyperedges = num_hyperedges
+    
+    return data
+
 if __name__ == '__main__':
     import ipdb
     ipdb.set_trace()
@@ -399,4 +506,3 @@ if __name__ == '__main__':
     data = load_cornell_dataset(dataset = 'walmart-trips', feature_noise = 0.1)
     data = load_cornell_dataset(dataset = 'walmart-trips', feature_noise = 1)
     data = load_cornell_dataset(dataset = 'walmart-trips', feature_noise = 10)
-

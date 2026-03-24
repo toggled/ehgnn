@@ -262,3 +262,24 @@ def normalise(M):
     DI = sp.diags(di)    # D inverse i.e. D^{-1}
     
     return DI.dot(M)
+
+# def build_hyperedge_clusters_uniform(num_edges: int,
+#                                      cluster_size: int,
+#                                      device=None) -> torch.LongTensor:
+#     """
+#     Assign each hyperedge to a 'meta-hyperedge' (cluster) of size ~cluster_size.
+
+#     Returns:
+#         edge2cluster: LongTensor [num_edges], values in [0, num_clusters - 1]
+#     """
+#     if cluster_size <= 0:
+#         raise ValueError(f"cluster_size must be positive, got {cluster_size}")
+
+#     # Cluster ids [0, 1, 2, ..., num_clusters-1] repeated
+#     edge_idx = torch.arange(num_edges, device=device)
+#     edge2cluster = edge_idx // cluster_size  # integer division
+
+#     # Just to be safe, normalize to contiguous [0..C-1]
+#     edge2cluster = edge2cluster - edge2cluster.min()
+#     return edge2cluster
+

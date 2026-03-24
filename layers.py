@@ -269,7 +269,7 @@ class HNHNConv(MessagePassing):
                 :math:`\mathbf{W} \in \mathbb{R}^M`. (default: :obj:`None`)
         """
         hyperedge_index = data.edge_index
-        hyperedge_weight = None
+        # hyperedge_weight = None
         num_nodes, num_edges = x.size(0), 0
         if hyperedge_index.numel() > 0:
             num_edges = int(hyperedge_index[1].max()) + 1
@@ -314,8 +314,8 @@ class HNHNConv(MessagePassing):
         return "{}({}, {}, {})".format(self.__class__.__name__, self.in_channels,
                                    self.hidden_channels, self.out_channels)
 
-
-class HypergraphConv(MessagePassing):
+# Old implementation (only accepts hyperedge level weights)
+class HypergraphConvOld(MessagePassing):
     r"""The hypergraph convolutional operator from the `"Hypergraph Convolution
     and Hypergraph Attention" <https://arxiv.org/abs/1901.08150>`_ paper
 
@@ -367,7 +367,7 @@ class HypergraphConv(MessagePassing):
                  concat=True, negative_slope=0.2, dropout=0, bias=True,
                  **kwargs):
         kwargs.setdefault('aggr', 'add')
-        super(HypergraphConv, self).__init__(node_dim=0, **kwargs)
+        super(HypergraphConvOld, self).__init__(node_dim=0, **kwargs)
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -499,6 +499,218 @@ class HypergraphConv(MessagePassing):
     def __repr__(self):
         return "{}({}, {})".format(self.__class__.__name__, self.in_channels,
                                    self.out_channels)
+
+# New implementation (accepts incidence-level and/or edge-level weights.)
+class HypergraphConv(MessagePassing):
+    r"""
+    HypergraphConv with optional *incidence weights* (per (node, hyperedge) pair).
+
+    Adds argument:
+      - inc_weight: Tensor of shape [nnz] aligned with hyperedge_index columns.
+        Interpreted as the weight of each incidence (node-hyperedge membership).
+
+    Notes on how it is used:
+      - B (hyperedge degree) becomes sum of inc_weight per hyperedge
+      - D (node degree) becomes sum of (hyperedge_weight[e] * inc_weight) over incidences touching node
+      - Messages along each incidence are multiplied by inc_weight
+      - hyperedge_weight (per-hyperedge) is applied on node->hyperedge messages
+        (consistent with H W B^{-1} H^T)
+    """
+
+    def __init__(self, in_channels, out_channels, symdegnorm=False, use_attention=False, heads=1,
+                 concat=True, negative_slope=0.2, dropout=0, bias=True, **kwargs):
+        kwargs.setdefault('aggr', 'add')
+        super().__init__(node_dim=0, **kwargs)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.use_attention = False # use_attention disabled
+        self.symdegnorm = symdegnorm
+
+        if self.use_attention:
+            self.heads = heads
+            self.concat = concat
+            self.negative_slope = negative_slope
+            self.dropout = dropout
+            self.weight = Parameter(torch.Tensor(in_channels, heads * out_channels))
+            self.att = Parameter(torch.Tensor(1, heads, 2 * out_channels))
+        else:
+            self.heads = 1
+            self.concat = True
+            self.weight = Parameter(torch.Tensor(in_channels, out_channels))
+
+        if bias and concat:
+            self.bias = Parameter(torch.Tensor(heads * out_channels))
+        elif bias and not concat:
+            self.bias = Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        glorot(self.weight)
+        if self.use_attention:
+            glorot(self.att)
+        zeros(self.bias)
+
+    def forward(
+        self,
+        x: Tensor,
+        hyperedge_index: Tensor,
+        hyperedge_weight: Optional[Tensor] = None,
+        inc_weight: Optional[Tensor] = None,
+    ) -> Tensor:
+        """
+        Args:
+            x: Node features [N, F]
+            hyperedge_index: LongTensor [2, nnz] with rows [node_id, edge_id]
+            hyperedge_weight: Tensor [M] per-hyperedge weight (optional)
+            inc_weight: Tensor [nnz] per-incidence weight aligned to hyperedge_index columns (optional)
+        """
+        num_nodes = x.size(0)
+        nnz = hyperedge_index.size(1)
+
+        # Handle empty incidence matrix
+        if hyperedge_index.numel() == 0 or nnz == 0:
+            out = x.new_zeros((num_nodes, self.heads * self.out_channels if self.concat else self.out_channels))
+            if self.bias is not None:
+                out = out + self.bias
+            return out
+
+        num_edges = int(hyperedge_index[1].max()) + 1
+
+        if hyperedge_weight is None:
+            hyperedge_weight = x.new_ones(num_edges)
+        else:
+            assert hyperedge_weight.numel() == num_edges, \
+                f"hyperedge_weight must have shape [{num_edges}], got {list(hyperedge_weight.shape)}"
+
+        if inc_weight is None:
+            inc_weight = x.new_ones(nnz)
+        else:
+            assert inc_weight.numel() == nnz, \
+                f"inc_weight must have shape [{nnz}], got {list(inc_weight.shape)}"
+            inc_weight = inc_weight.to(x.dtype)
+
+        # Linear projection
+        x = torch.matmul(x, self.weight)
+
+        # Optional attention over incidences
+        alpha = None
+        if self.use_attention:
+            x = x.view(-1, self.heads, self.out_channels)
+            x_i, x_j = x[hyperedge_index[0]], x[hyperedge_index[1]]
+            alpha = (torch.cat([x_i, x_j], dim=-1) * self.att).sum(dim=-1)
+            alpha = F.leaky_relu(alpha, self.negative_slope)
+            alpha = softmax(alpha, hyperedge_index[0], num_nodes=x.size(0))
+            alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+
+        # Per-incidence hyperedge weight (edge weight of the target hyperedge of each incidence)
+        he_w_inc = hyperedge_weight[hyperedge_index[1]]  # [nnz]
+
+        # -----------------------------
+        # Compute degrees with weights
+        # -----------------------------
+        # Hyperedge "degree": sum of incidence weights in each hyperedge
+        B = scatter_add(inc_weight, hyperedge_index[1], dim=0, dim_size=num_edges)  # [M]
+        B = 1.0 / B
+        B[B == float("inf")] = 0
+
+        # Node "degree": sum over incidences touching node of (hyperedge_weight[e] * inc_weight)
+        D = scatter_add(he_w_inc * inc_weight, hyperedge_index[0], dim=0, dim_size=num_nodes)  # [N]
+
+        if not self.symdegnorm:
+            D = 1.0 / D
+            D[D == float("inf")] = 0
+
+            # node -> hyperedge : use B on hyperedges, and apply hyperedge_weight + inc_weight on messages
+            out = self.propagate(
+                hyperedge_index,
+                x=x,
+                norm=B,
+                alpha=alpha,
+                inc_weight=inc_weight,
+                edge_weight=he_w_inc,     # apply W on node->edge messages
+                size=(num_nodes, num_edges),
+            )
+
+            # hyperedge -> node : use D on nodes, keep incidence weights; don't re-apply hyperedge_weight
+            out = self.propagate(
+                hyperedge_index.flip([0]),
+                x=out,
+                norm=D,
+                alpha=alpha,
+                inc_weight=inc_weight,
+                edge_weight=None,
+                size=(num_edges, num_nodes),
+            )
+
+        else:
+            # HGNN-style symmetric normalization
+            D = 1.0 / (D ** 0.5)
+            D[D == float("inf")] = 0
+
+            # Pre-multiply by D^{-1/2}
+            x = D.unsqueeze(-1) * x
+
+            out = self.propagate(
+                hyperedge_index,
+                x=x,
+                norm=B,
+                alpha=alpha,
+                inc_weight=inc_weight,
+                edge_weight=he_w_inc,
+                size=(num_nodes, num_edges),
+            )
+
+            out = self.propagate(
+                hyperedge_index.flip([0]),
+                x=out,
+                norm=D,
+                alpha=alpha,
+                inc_weight=inc_weight,
+                edge_weight=None,
+                size=(num_edges, num_nodes),
+            )
+
+        if self.concat is True:
+            out = out.view(-1, self.heads * self.out_channels)
+        else:
+            out = out.mean(dim=1)
+
+        if self.bias is not None:
+            out = out + self.bias
+
+        return out
+
+    def message(
+        self,
+        x_j: Tensor,
+        norm_i: Tensor,
+        alpha: Optional[Tensor],
+        inc_weight: Tensor,
+        edge_weight: Optional[Tensor],
+    ) -> Tensor:
+        H, Fout = self.heads, self.out_channels
+
+        # base normalized message
+        out = norm_i.view(-1, 1, 1) * x_j.view(-1, H, Fout)
+
+        # incidence weighting (fine-grained)
+        out = inc_weight.view(-1, 1, 1) * out
+
+        # hyperedge weighting on node->hyperedge pass (edge_weight is per-incidence hyperedge_weight)
+        if edge_weight is not None:
+            out = edge_weight.view(-1, 1, 1) * out
+
+        if alpha is not None:
+            out = alpha.view(-1, H, 1) * out
+
+        return out
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.in_channels}, {self.out_channels})"
 
 class MLP(nn.Module):
     """ adapted from https://github.com/CUAI/CorrectAndSmooth/blob/master/gen_models.py """

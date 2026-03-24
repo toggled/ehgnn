@@ -2,9 +2,7 @@
 # coding: utf-8
 
 import os
-import shutil
 import time
-import csv
 # import math
 import torch
 # import pickle
@@ -27,7 +25,6 @@ from preprocessing import *
 from torch_geometric.data import Data
 
 from convert_datasets_to_pygDataset import dataset_Hypergraph
-from load_other_datasets import load_hyperufg_node_homophily_dataset
 import sys
 #sys.path.append('../../')
 from mla_utils import *
@@ -39,6 +36,7 @@ from contextlib import contextmanager
 import subprocess
 import re
 from edgnn import EquivSetGNN
+from diagnostic import * 
 
 # def get_gpu_memory_usage(cuda_id):
 #     result = subprocess.check_output(['nvidia-smi', '--query-gpu=memory.used', '--format=csv,nounits,noheader'])
@@ -48,8 +46,7 @@ from edgnn import EquivSetGNN
 variant_map = {
     "full": "Full",
     "random": "Random",
-    "degdist": "EdgeDeg",
-    "min_deg": "Min-deg",
+    "degdist": "Degdist",
     "effresist": "Spectral",
     "learnmask": "EHGNN-F",       # EHGNN-F
     "learnmask_cond": "EHGNN-F(cond)",      # EHGNN-C
@@ -77,25 +74,10 @@ dname_map = {
     'trivago': 'Trivago',
     'syn_coherent': 'SynCoherent',
     'syn_core_decoy': 'SynCore+Decoy',
-    'ufg_n0.3': '0.3',
-    'ufg_n0.4': '0.4',
-    'ufg_n0.8': '0.8',
-    'ufg_n0.9': '0.9'
 }
+def is_syn_family_name(dname: str) -> bool:
+    return isinstance(dname, str) and (dname.startswith("syn_family_") or dname.startswith("synfamily_"))
 
-
-def debug_data_summary(stage, data):
-    norm_shape = tuple(data.norm.shape) if hasattr(data, 'norm') and data.norm is not None else None
-    print(
-        f"[debug] {stage}: "
-        f"x={tuple(data.x.shape)}, "
-        f"edge_index={tuple(data.edge_index.shape)}, "
-        f"y={tuple(data.y.shape)}, "
-        f"n_x={data.n_x}, "
-        f"num_hyperedges={getattr(data, 'num_hyperedges', None)}, "
-        f"norm={norm_shape}"
-    )
- 
 def parse_method(args, data, data_p):
     #     Currently we don't set hyperparameters w.r.t. different dataset
     if args.method == 'AllSetTransformer':
@@ -170,8 +152,6 @@ def parse_method(args, data, data_p):
                          num_classses=args.num_classes,
                          args=args
                          )
-    elif args.method == 'HyperUFG':
-        model = HyperUFG(args)
 
     elif args.method == 'HGNN':
         # model = HGNN(in_ch=args.num_features,
@@ -282,7 +262,7 @@ def evaluate(args, model, data, split_idx, eval_func, result=None,edge_index_knn
         data_input = [data, test_flag]
     else:
         data_input = data
-    if args.mode in ['random', 'degdist', 'effresist', 'min_deg']:
+    if args.mode in ['random', 'degdist', 'effresist']:
         data_input.edge_index = edge_index_knn
 
     # if args.mode == 'edgecent':
@@ -341,17 +321,115 @@ def eval_acc(y_true, y_pred):
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
+def _choose_adv_class(c: int, num_classes: int, rng: np.random.Generator, mode: str) -> int:
+    if num_classes <= 1:
+        return c
+    if mode == "next":
+        return (c + 1) % num_classes
+    # random != c
+    others = [cc for cc in range(num_classes) if cc != c]
+    return int(rng.choice(others))
 
-def align_stats_to_existing_schema(stats, filename):
-    """Match current stats keys to an existing CSV schema, if the file exists."""
-    if not os.path.isfile(filename):
-        return stats
-    with open(filename, "r", newline="") as f:
-        reader = csv.reader(f)
-        header = next(reader, None)
-    if not header:
-        return stats
-    return {k: stats.get(k, None) for k in header}
+def corrupt_family(
+    data: Data,
+    *,
+    p_edge: float,
+    q_inc: float,
+    adversarial_mode: str,
+    seed: int,
+) -> Data:
+    """
+    Dynamic corruption for real data in V2E format.
+
+    - With prob p_edge, an entire hyperedge's incidences are replaced by nodes from an adversarial class.
+      (coarse corruption)
+    - Otherwise, within the hyperedge, replace ~q_inc fraction of incidences with adversarial-class nodes.
+      (fine corruption)
+
+    Assumes data.edge_index = [V_idx; E_idx] with E_idx in [0, m-1] (or at least integer ids).
+    """
+    assert 0.0 <= p_edge <= 1.0
+    assert 0.0 <= q_inc <= 1.0
+
+    out = copy.deepcopy(data)
+
+    V_idx = out.edge_index[0].clone()
+    E_idx = out.edge_index[1].clone()
+
+    # Ensure hyperedge ids start at 0 (you do this later for some methods already). :contentReference[oaicite:3]{index=3}
+    E_idx = E_idx - E_idx.min()
+
+    N = out.x.size(0)
+    y = out.y
+    num_classes = int(y.max().item() + 1)
+
+    m = int(E_idx.max().item() + 1)
+    rng = np.random.default_rng(seed)
+
+    # Precompute nodes per class for fast sampling
+    class_nodes = []
+    for c in range(num_classes):
+        idx = (y == c).nonzero(as_tuple=False).view(-1).cpu().numpy()
+        class_nodes.append(idx)
+
+    # Group incidence positions per hyperedge
+    # (looping over m is ok for Cora-scale; optimize later if needed)
+    new_V_list = []
+    new_E_list = []
+
+    for e in range(m):
+        pos = (E_idx == e).nonzero(as_tuple=False).view(-1)
+        if pos.numel() == 0:
+            continue
+
+        nodes = V_idx[pos]
+        edge_sz = int(nodes.numel())
+
+        # true class = majority label among nodes in this hyperedge
+        labels = y[nodes].detach().cpu().numpy()
+        # majority vote (ties broken arbitrarily by argmax)
+        binc = np.bincount(labels, minlength=num_classes)
+        c = int(binc.argmax())
+        c_bad = _choose_adv_class(c, num_classes, rng, adversarial_mode)
+
+        if rng.random() < p_edge:
+            # ---- coarse corruption: replace entire edge by adversarial-class nodes ----
+            pool = class_nodes[c_bad]
+            if pool.size == 0:
+                # fallback: keep as-is
+                new_nodes = nodes.detach().cpu().numpy()
+            else:
+                replace = pool.size < edge_sz
+                new_nodes = rng.choice(pool, size=edge_sz, replace=replace)
+        else:
+            # ---- fine corruption: replace a fraction of incidences ----
+            k = int(round(q_inc * edge_sz))
+            k = max(0, min(k, edge_sz))
+
+            nodes_np = nodes.detach().cpu().numpy().copy()
+            if k > 0:
+                rep_pos = rng.choice(edge_sz, size=k, replace=False)
+                pool = class_nodes[c_bad]
+                if pool.size > 0:
+                    replace = pool.size < k
+                    nodes_np[rep_pos] = rng.choice(pool, size=k, replace=replace)
+
+            new_nodes = nodes_np
+
+        new_V_list.append(torch.from_numpy(np.asarray(new_nodes, dtype=np.int64)))
+        new_E_list.append(torch.full((edge_sz,), e, dtype=torch.long))
+
+    new_V = torch.cat(new_V_list, dim=0).to(out.edge_index.device)
+    new_E = torch.cat(new_E_list, dim=0).to(out.edge_index.device)
+    out.edge_index = torch.stack([new_V, new_E], dim=0)
+
+    # keep num_hyperedges consistent if present
+    out.num_hyperedges = torch.tensor([m], device=out.edge_index.device)
+    # keep n_x consistent if present
+    if not hasattr(out, "n_x"):
+        out.n_x = torch.tensor([N], device=out.edge_index.device)
+
+    return out
 
 def perturb_hyperedges(data, prop, perturb_type='delete'):
     data_p = copy.deepcopy(data)
@@ -440,11 +518,7 @@ def setup_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
-    if args.method == 'HSL':
-        torch.use_deterministic_algorithms(True) 
-        torch.backends.cudnn.benchmark = False
-    else:
-        torch.use_deterministic_algorithms = True
+    torch.use_deterministic_algorithms = True 
     if torch.cuda.is_available():
         torch.cuda.current_device()
         torch.cuda._initialized = True
@@ -516,9 +590,6 @@ if __name__ == '__main__':
     #     Args for Attentions: GAT and SetGNN
     parser.add_argument('--heads', default=1, type=int)  # Placeholder
     parser.add_argument('--output_heads', default=1, type=int)  # Placeholder
-    parser.add_argument('--hyperufg_alpha', default=0.1, type=float)
-    parser.add_argument('--hyperufg_lambda', default=0.5, type=float)
-    parser.add_argument('--hyperufg_cheb_order', default=10, type=int)
     #     Args for HNHN
     parser.add_argument('--HNHN_alpha', default=-1.5, type=float)
     parser.add_argument('--HNHN_beta', default=-0.5, type=float)
@@ -536,10 +607,10 @@ if __name__ == '__main__':
     parser.add_argument('--edconv_type', default='EquivSet', type=str, choices=['EquivSet', 'JumpLink', 'MeanDeg', 'Attn', 'TwoSets'])
     parser.add_argument('--restart_alpha', default=0.5, type=float)
 
-    # Args for sparsification methodsFpe
+    # Args for sparsification methods
     parser.add_argument('--patience', type=int, default=200, help='Patience for training with early stopping.')
-    parser.add_argument('--mode', type=str, default='learnmask', choices=['static','adaptive','budgeted','random','learnmask','learnmask+','min_deg', 'degree','degdist','effresist','edgecent','full','Neural','learnmask_cond','learnmask+_agn','NeuralF'])
-    parser.add_argument('--keep_ratio', type=float, default=0.5, help='keep ratio for sparsification')
+    parser.add_argument('--mode', type=str, default='learnmask', choices=['static','adaptive','budgeted','random','learnmask','learnmask+','degree','degdist','effresist','edgecent','full','Neural','learnmask_cond','learnmask+_agn','NeuralF'])
+    parser.add_argument('--keep_ratio', type=float, default=0.3, help='keep ratio for sparsification')
     parser.add_argument('--reg',type=str,default='none', choices=['none','l2','kl'], help='regularization for the model')
     parser.add_argument('--coarse_MLP', type=int, default = 32, help='hidden dimension for the coarse MLP')
     parser.add_argument('--withbucket', action='store_true')
@@ -560,7 +631,19 @@ if __name__ == '__main__':
     # Spectral method make better: Use approximate pseudoinverse of laplacian using a Hutchinson-type random projection estimator for diag(L^+)
     parser.add_argument('--approxLinv', action='store_true') # If set uses laplacian pseudoinverse approximately
     parser.add_argument('--theory',action='store_true')
-    parser.add_argument('--sampling',type=str,default='multinomial',choices=['multinomial','topk'])
+    parser.add_argument('--sampling',type=str,default='multinomial',choices=['multinomial','gumbel'])
+    parser.add_argument("--diagnostics", type=int, default=0)
+    # ---- Dynamic corruption (in-memory) ----
+    parser.add_argument('--corrupt', action='store_true',
+                        help="Apply in-memory corruption family to dataset.data.")
+    parser.add_argument('--p_edge', type=float, default=0.0,
+                        help="Probability an entire hyperedge is corrupted (coarse-type).")
+    parser.add_argument('--q_inc', type=float, default=0.0,
+                        help="Fraction of incidences corrupted inside non-globally-bad edges (fine-type).")
+    parser.add_argument('--adversarial_mode', type=str, default='next',
+                        choices=['next', 'random'])
+    parser.add_argument('--corrupt_seed', type=int, default=0)
+
     parser.set_defaults(PMA=True)  # True: Use PMA. False: Use Deepsets.
     parser.set_defaults(add_self_loop=True)
     parser.set_defaults(exclude_self=False)
@@ -581,10 +664,9 @@ if __name__ == '__main__':
         from theoryutils import *
         # from models_sparse_fixgradprop import *
         from models_sparse_tmlr import *
-        # from models_sparse_fixgradpropfixbudget import *
         print('Corrected the bugs in backproping gradients to logits.')
     else:
-        from models_sparse_tmlr import * # Version whose result was reported in the rebuttal. Has issues with propagating grad from loss -> logits.
+        from models_sparse import * # Version whose result was reported in the rebuttal. Has issues with propagating grad from loss -> logits.
 
     
     # # Part 1: Load data
@@ -594,7 +676,7 @@ if __name__ == '__main__':
     # root='./'+args.attack+'_hypergraphMLP_final2'
     os.makedirs(root, exist_ok=True)
     save = False
-    print('------------ ',args.dname,variant_map[args.mode],'-------------')
+    print('------------ ',args.dname,args.mode,'-------------')
     # AllSetTransformer co-citeseer mla_fgsm 1
     ### Load and preprocess data ###
     existing_dataset = ['20newsW100', 'ModelNet40', 'zoo',
@@ -602,33 +684,20 @@ if __name__ == '__main__':
                         'coauthor_cora', 'coauthor_dblp',
                         'yelp', 'amazon-reviews', 'walmart-trips', 'house-committees',
                         'walmart-trips-100', 'house-committees-100',
-                        'cora', 'citeseer', 'pubmed','actor','pokec','twitch','amazon','syn', 'syn_coherent','syn_core_decoy',
-                        'ufg_n0.3','ufg_n0.4','ufg_n0.8','ufg_n0.9','trivago']
+                        'cora', 'citeseer', 'pubmed','actor','pokec','twitch','amazon','syn', 'syn_coherent','syn_core_decoy','syn_incidence_favoured_v3',
+                        'ufg_n0.3','ufg_n0.4','ufg_n0.8','ufg_n0.9']
     
     synthetic_list = ['amazon-reviews', 'walmart-trips', 'house-committees', 'walmart-trips-100', 'house-committees-100','ufg_n0.3','ufg_n0.4','ufg_n0.8','ufg_n0.9']
     if args.dname in ['actor']:
         args.__setattr__('add_self_loop', False)
-    if args.dname in existing_dataset:
+    if args.dname in existing_dataset or is_syn_family_name(args.dname):
         dname = args.dname
         f_noise = args.feature_noise
-        if dname.startswith('ufg_n'):
-            data = load_hyperufg_node_homophily_dataset(
-                dataset=dname,
-                base_dir='./HyperUFG/Synthetic Data/Node Homophily',
-                feature_dim=64,
-                train_percent=0.025,
-                seed=11,
-            )
-            args.num_features = data.x.shape[1]
-            args.num_classes = int(torch.unique(data.y).numel())
-        elif (f_noise is not None) and dname in synthetic_list:
+        if (f_noise is not None) and dname in synthetic_list:
             p2raw = './data/AllSet_all_raw_data/'
             dataset = dataset_Hypergraph(name=dname, 
-                feature_noise=f_noise,
-                p2raw = p2raw)
-            data = dataset.data
-            args.num_features = dataset.num_features
-            args.num_classes = dataset.num_classes
+                    feature_noise=f_noise,
+                    p2raw = p2raw)
         else:
             if dname in ['cora', 'citeseer','pubmed']:
                 p2raw = './data/AllSet_all_raw_data/cocitation/'
@@ -639,17 +708,22 @@ if __name__ == '__main__':
             elif dname in ['actor','pokec','twitch','amazon','syn']:
                 p2raw = './data/hetero/'
                 print('p2raw: ',p2raw)
-            elif dname in ['syn_coherent','syn_core_decoy']:
-                # dataset = dataset_Hypergraph(root='./data/pyg_data/hypergraph_dataset_updated/', name='syn_coherent')
+            elif dname in ['syn_coherent','syn_core_decoy','syn_incidence_favoured_v3'] or is_syn_family_name(dname):
                 p2raw = None
             else:
                 p2raw = './data/AllSet_all_raw_data/'
-            dataset = dataset_Hypergraph(name=dname,root = './data/pyg_data/hypergraph_dataset_updated/',
+            dataset = dataset_Hypergraph(name=dname,root = '../data/pyg_data/hypergraph_dataset_updated/',
                                          p2raw = p2raw)
-            data = dataset.data
-            args.num_features = dataset.num_features
-            args.num_classes = dataset.num_classes
-            print(f"[debug] dataset cache: {dataset.processed_paths[0]}")
+        data = dataset.data
+        if args.corrupt:
+            args.dname = (
+                f"corrupt_family_{args.dname}"
+                f"_pe{args.p_edge:.2f}"
+                f"_qi{args.q_inc:.2f}"
+                f"_{args.adversarial_mode}"
+            )
+        args.num_features = dataset.num_features
+        args.num_classes = dataset.num_classes
         if args.dname in ['yelp', 'walmart-trips', 'house-committees', 'walmart-trips-100', 'house-committees-100','ufg_n0.3','ufg_n0.4','ufg_n0.8','ufg_n0.9']:
             #         Shift the y label to start with 0
             args.num_classes = len(data.y.unique())
@@ -660,7 +734,6 @@ if __name__ == '__main__':
             # note that we assume the he_id is consecutive.
             data.num_hyperedges = torch.tensor(
                 [data.edge_index[0].max()-data.n_x[0]+1])
-        debug_data_summary('loaded dataset', data)
     
     # ipdb.set_trace()
     #     Preprocessing
@@ -672,7 +745,6 @@ if __name__ == '__main__':
         device = torch.device('cpu')
     if args.method in ['AllSetTransformer', 'AllDeepSets']:
         data = ExtractV2E(data)
-        debug_data_summary('after ExtractV2E', data)
         data_p = perturb_hyperedges(data, args.perturb_prop, args.perturb_type)
         if args.add_self_loop:
             data = Add_Self_Loops(data)
@@ -688,12 +760,9 @@ if __name__ == '__main__':
         
     elif args.method in ['CEGCN', 'CEGAT']:
         data = ExtractV2E(data)
-        debug_data_summary('after ExtractV2E', data)
         data_p = perturb_hyperedges(data, args.perturb_prop, args.perturb_type)
         data = ConstructV2V(data)
-        debug_data_summary('after ConstructV2V', data)
         data = norm_contruction(data, TYPE='V2V')
-        debug_data_summary('after V2V norm', data)
         data_p = ConstructV2V(data_p)
         data_p = norm_contruction(data_p, TYPE='V2V')
     
@@ -729,7 +798,7 @@ if __name__ == '__main__':
         data_p = generate_norm_HNHN(H_p, data_p, args)
         data_p.edge_index[1] -= data_p.edge_index[1].min()
     
-    elif args.method in ['HCHA', 'HGNN', 'EDGNN', 'HSL', 'HyperUFG']:
+    elif args.method in ['HCHA', 'HGNN', 'EDGNN', 'HSL']:
         # rep = find_repeated_hyperedges(data)
         # # print('repeated hyperedges: ',len(rep[0]))
         # import sys 
@@ -738,7 +807,16 @@ if __name__ == '__main__':
         # print(data.edge_index[1].min(),data.edge_index[1].max())
         # print(data.edge_index[0].min(),data.edge_index[0].max())
         data = ExtractV2E(data)
-        debug_data_summary('after ExtractV2E', data)
+        print('after extract: ',data)
+        # ---- In-memory corruption ----
+        if args.corrupt:
+            data = corrupt_family(
+                data,
+                p_edge=args.p_edge,
+                q_inc=args.q_inc,
+                adversarial_mode=args.adversarial_mode,
+                seed=args.corrupt_seed,
+            )
         data_p = perturb_hyperedges(data, args.perturb_prop, args.perturb_type)
         if args.mode == 'full' and args.method != "HSL":
             if args.add_self_loop:
@@ -746,7 +824,7 @@ if __name__ == '__main__':
                 # print('after add self loop: ',data)
                 data_p = Add_Self_Loops(data_p)
     #    Make the first he_id to be 0
-        data_p.edge_index[1] -= data_p.edge_index[1].min()
+        # data_p.edge_index[1] -= data_p.edge_index[1].min()
         # print('data.edge_index[1].min(): ',data.edge_index[1].min())
         data.edge_index[1] -= data.edge_index[1].min()
         # print('after min: ',data)
@@ -839,11 +917,14 @@ if __name__ == '__main__':
     #     _, _, _, train_mask, val_mask, test_mask = get_dataset(args, device=device,\
     #                                                            train_ratio=0.5, val_ratio=0.25, test_ratio=0.25)
     # split_idx = rand_train_test_idx(data.y)
-    split_idx = rand_train_test_idx(data.y,train_prop = 0.5,valid_prop = 0.25)
+    split_idx = rand_train_test_idx(data.y,train_prop = 0.1,valid_prop = 0.1)
     train_mask, val_mask, test_mask = split_idx['train'], split_idx['valid'], split_idx['test']
     print('% Train: ',sum(train_mask)*100/len(train_mask))
     print(data)
-    
+    import time
+
+    # print("Printed immediately.")
+    # time.sleep(40) # Pause for 2.5 seconds
     # split_idx_lst = kfold_train_test_idx(data.y, args.runs)
     # # Part 2: Load model
     
@@ -854,7 +935,7 @@ if __name__ == '__main__':
                               if torch.cuda.is_available() else 'cpu')
     else:
         device = torch.device('cpu')
-    if args.mode in ['random','degdist','effresist','min_deg']:
+    if args.mode in ['random','degdist','effresist']:
         edge_index_copy = deepcopy(data.edge_index)
     model, data_p = model.to(device), data_p.to(device)
     if args.method == 'UniGCNII':
@@ -864,7 +945,6 @@ if __name__ == '__main__':
         args.UniGNN_degE_p = args.UniGNN_degE_p.to(device)
     
     num_params = count_parameters(model)
-    print('#params: ', num_params)
     _,_,static_model_bytes = get_param_and_buffer_memory_bytes(model)
     # print('static model size (MB): ', static_model_bytes/(1024**2))
     # # Part 3: Main. Training + Evaluation
@@ -888,11 +968,13 @@ if __name__ == '__main__':
     stop_epoch_list = []
     test_accuracy_list = []
     mask_flipfraction_list = []
+    diag_list = []
+
     # memories_epochs = []
     data_copy = deepcopy(data)
 
     for run in range(args.runs):
-        if args.mode in ['random','degdist','effresist','min_deg']:
+        if args.mode in ['random','degdist','effresist']:
             data.edge_index = edge_index_copy
         data = data.to(device)
         # split_idx = split_idx_lst[run]
@@ -957,10 +1039,6 @@ if __name__ == '__main__':
             edge_index_knn = degree_distribution_sparsify(data.edge_index,keep_ratio=args.keep_ratio)
             ratio = log_sparsification_info(data.edge_index, edge_index_knn, label=None, verbose = args.verbose)
             data.edge_index = edge_index_knn
-        if args.mode == 'min_deg':
-            edge_index_knn = min_degree_sparsify(data.edge_index, data.num_hyperedges, keep_ratio=args.keep_ratio)
-            ratio = log_sparsification_info(data.edge_index, edge_index_knn, label=None, verbose = args.verbose)
-            data.edge_index = edge_index_knn
         total_epochs = 0
         end_time = time.time()
         sp_time = end_time - start_time
@@ -1001,13 +1079,13 @@ if __name__ == '__main__':
                 loss = cls_loss + args.hsl_contrastive_weight * contrastive_loss
             elif args.mode.startswith('learnmask') or args.mode.startswith('Neural'):
                 if save_probs:
-                    out, probs,mask = model(data_input, return_mask = True)
+                    out, probs,mask = model(data_input,epoch, return_mask = True)
                     out = F.log_softmax(out, dim=1)
                     probabilities.append(probs.detach().cpu().numpy())
                     masks.append(mask.detach().cpu().numpy())
                 else:
                     if args.theory:
-                        out, probs, mask = model(data_input, return_mask = True)
+                        out, mask, probs = model(data_input,epoch, return_mask = True)
                         # with torch.no_grad():
                         #     V_idx, E_idx = data.edge_index
                         #     # probs = mask # torch.sigmoid(model.mask_module.logits)
@@ -1120,7 +1198,7 @@ if __name__ == '__main__':
             #           f'Train Acc: {100 * result[0]:.2f}%, '
             #           f'Valid Acc: {100 * result[1]:.2f}%, '
             #           f'Test  Acc: {100 * result[2]:.2f}%')
-                if args.method == 'HSL' and  epoch % args.display_step == 0:
+                if args.method == 'HSL':
                     print('sparsification ratio = ',1-model.ratio)
         if best_model_state is not None:
             model.load_state_dict(best_model_state)
@@ -1128,8 +1206,20 @@ if __name__ == '__main__':
         total_train_time = (end_time - start_time)
         runtime_list.append(total_train_time/total_epochs)
         stop_epoch_list.append(total_epochs)
+        if getattr(args, "diagnostics", 0) == 1:
+            diag_run = run_incidence_diagnostics(
+                    model=model,
+                    data=data,
+                    args=args,
+                    evaluate_fn=evaluate,
+                    split_idx=split_idx,
+                    eval_func=eval_func,
+                )
+            if isinstance(diag_run, dict):
+                diag_list.append(diag_run)
+
         start_time = time.time()
-        if args.mode in ['random', 'degdist', 'effresist','min_deg']:
+        if args.mode in ['random', 'degdist', 'effresist']:
             result = evaluate(args, model, data, split_idx, eval_func, edge_index_knn=edge_index_knn)
         else:
             result = evaluate(args, model, data, split_idx, eval_func, edge_index_knn=None)
@@ -1180,12 +1270,27 @@ if __name__ == '__main__':
     avg_time, std_time = np.mean(runtime_list), np.std(runtime_list)
     print(f'Runtime/epoch: mean = {avg_time:.3f}, std = {std_time:.3f}')
     print(f'Eval Runtime: {np.mean(eval_runtime_list):.3f} ± {np.std(eval_runtime_list):.3f}')
-    print(f'End-to-end time: {np.mean(end_to_end_time_list):.3f} ± {np.std(end_to_end_time_list):.3f}')
     print(f'Sparsification ratio: {np.mean(spars_ratios):.3f} ± {np.std(spars_ratios):.3f}')
     print(f'Max memory usage (MB): {np.mean(max_memory_list):.3f} ± {np.std(max_memory_list):.3f}')
     print(f'Max memory usage (GB): {np.mean(max_memory_list)/1024:.3f}')
     best_val, best_test = logger.print_statistics()
     print(f'Avg Test acc: {best_test.mean():.2f} ± {best_test.std():.2f}')
+    diag_avg = {}
+    diag_std = {}
+    if len(diag_list) > 0:
+        keys = sorted(set().union(*[d.keys() for d in diag_list]))
+        for k in keys:
+            vals = [d.get(k, np.nan) for d in diag_list]
+            vals = [v for v in vals if isinstance(v, (int, float)) and not np.isnan(v)]
+
+            if len(vals) == 0:
+                # all runs were NaN → explicitly store NaN
+                diag_avg[k] = np.nan
+                diag_std[k] = np.nan
+            else:
+                diag_avg[k] = float(np.mean(vals))
+                diag_std[k] = float(np.std(vals))
+
     # if args.method == 'HSL':
     #     print('Empirical RVs over runs: ', spars_ratios)
     # stats = {
@@ -1244,11 +1349,9 @@ if __name__ == '__main__':
     #     plt.savefig(f'results/mask_flip_fraction_{args.method}_{args.dname}_{args.mode}.pdf', bbox_inches='tight')
     stats = {
         "method": args.method,
-        "dname": dname_map[args.dname],
+        "dname": dname_map.get(args.dname, args.dname),
         "mode": args.mode,
         "withbucket": args.withbucket,
-        "withcluster": args.withcluster,
-        "withchunk": args.withchunk,
         "lr": args.lr,
         "weight_decay": args.wd,
         "patience": args.patience, 
@@ -1284,20 +1387,17 @@ if __name__ == '__main__':
          "static_model_MB": static_model_bytes / (1024**2),
          "activation_peak_MB": np.mean(max_memory_list) - static_model_bytes / (1024**2),
          "peak_memory_MB": np.mean(max_memory_list),
-         "variant": variant_map[args.mode] if args.method != 'HSL' else 'HSL',
-        #  "sampling": args.sampling 
+         "variant": variant_map[args.mode]
     }
-    if args.method == 'HSL':
-        target_filename = 'HGNN_'+args.fname 
-    elif args.method == 'HGNN':
-        target_filename = args.method+"_"+args.fname if args.fname != 'none' else 'none.csv'
-    else:
-        target_filename = args.fname if args.fname != 'none' else 'none.csv'
-    stats = align_stats_to_existing_schema(stats, target_filename)
+
     if args.fname != 'none':
-        save_to_csv(stats, filename=target_filename)
+        if len(diag_avg) > 0:
+            stats.update({f"diag_{k}_avg": v for k, v in diag_avg.items()})
+            stats.update({f"diag_{k}_std": v for k, v in diag_std.items()})
+
+        save_to_csv(stats, filename =args.method+'_'+args.fname)
     else:
-        save_to_csv(stats, filename=target_filename)
+        save_to_csv(stats, filename = args.method+"_hgnncCorrect.csv")
 
     # save_to_csv(stats, filename = args.method+"_resultsICLR.csv")
     # save_to_csv(stats, filename = args.method+"_results.csv")

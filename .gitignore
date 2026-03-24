@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+Hyper-SAGNN-master/__pycache__/
+Hyper-SAGNN-master/checkpoints/
+data/
+*.csv
+*.pdf 
+*.zip
+*.DS_Store
+*.xml
+*.iml
