@@ -1,0 +1,129 @@
+{
+  "protocol_version": "conditioned-scorers-v1",
+  "status": "fixed",
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp"
+  ],
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "test_prop": 0.25,
+    "feature_policy": "Use the same dataset features and fixed split as the main EHGNN-F experiment."
+  },
+  "implementation_invariants": {
+    "fine_mask_unit": "original node-hyperedge incidence",
+    "fine_budget": "K=max(1,floor(rho*t)) over t original incidences",
+    "training_selection": "Weighted sampling without replacement; deterministic hard top-k evaluation.",
+    "fixed_self_loops": "Exactly one fixed implicit singleton self-loop per node for every method, excluded from the structural budget.",
+    "weight_api": "Each variant returns one incidence weight per retained incidence to inc_weight.",
+    "reset": "Every scorer parameter is reset between model seeds.",
+    "checkpoint": "Validation-selected state_dict values are detached CPU clones.",
+    "test_access": "Tuning writes train and validation metrics only. Test metrics are opened only after freezing one configuration per variant.",
+    "conditioned_memory_rewrite": "Disabled. Evaluate the direct full-matrix implementation used in the paper.",
+    "initialization": "Use mask_init_std=0.01 for final scorer projections or low-rank edge factors so initial scores remain near probability 0.5, matching EHGNN-F.",
+    "score_chunk_size": null
+  },
+  "variants": {
+    "f_cond": {
+      "display_name": "EHGNN-F(cond)",
+      "mode": "learnmask_cond",
+      "granularity": "incidence",
+      "capacity_grid": [
+        16,
+        32
+      ],
+      "capacity_name": "scorer_hidden_dim"
+    },
+    "f_cond_lr": {
+      "display_name": "EHGNN-F(cond,LR)",
+      "mode": "NeuralF",
+      "granularity": "incidence",
+      "capacity_grid": [
+        4,
+        16
+      ],
+      "capacity_name": "rank"
+    }
+  },
+  "training": {
+    "backbone": "HGNN/HCHA",
+    "hidden": 512,
+    "layers": 1,
+    "dropout": 0.5,
+    "classifier_lr": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial_without_replacement",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier_grid": [
+      1,
+      5
+    ]
+  },
+  "tuning": {
+    "keep_ratio": 0.5,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "selection_scope": "one global configuration per variant",
+    "selection_metric": "equal-dataset macro validation accuracy over all four datasets",
+    "tie_tolerance_accuracy_points": 0.1,
+    "tie_break": [
+      "smaller capacity",
+      "smaller mask learning-rate multiplier",
+      "smaller configuration index"
+    ],
+    "forbidden_fields": [
+      "test accuracy",
+      "test loss",
+      "difference from EHGNN-F or Random-Fixed on test nodes"
+    ],
+    "feasibility_rule": "Select only configurations with complete non-OOM tuning results across all four datasets; if none exists, report the variant as infeasible."
+  },
+  "evaluation": {
+    "keep_ratio": 0.5,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "new_methods": [
+      "f_cond",
+      "f_cond_lr"
+    ],
+    "reused_controls": {
+      "incidence": "Reuse EHGNN-F, Random-Fixed, and Full records at 50% when all experiment settings match."
+    },
+    "comparisons": [
+      "Conditioned incidence variants versus free-logit EHGNN-F and Random-Fixed."
+    ],
+    "required_outputs": [
+      "ten-seed means, sample standard deviations, and paired 95% confidence intervals",
+      "paired seed wins and Wilcoxon p-values with clearly defined correction families",
+      "exact retained-incidence counts",
+      "effective forward density with fixed self-loops",
+      "node coverage and parameter counts",
+      "peak allocated GPU memory for one representative evaluation seed per dataset-method"
+    ]
+  },
+  "resource_policy": {
+    "hardware": "NVIDIA V100 32GB",
+    "oom_policy": "Record CUDA OOM for the evaluated implementation without substituting a different implementation.",
+    "resume_policy": "Reuse only complete protocol-hashed cells."
+  }
+}

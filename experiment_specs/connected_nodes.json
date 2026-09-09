@@ -1,0 +1,105 @@
+{
+  "protocol_version": "connected-nodes-v1",
+  "status": "fixed",
+  "output_root": ".work/connected_nodes",
+  "source_confirmation": {
+    "protocol_path": "experiment_specs/main_accuracy.json",
+    "protocol_sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8",
+    "frozen_config_path": "experiment_specs/main_selected_hyperparameters.json",
+    "frozen_config_sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4",
+    "output_root": ".work/main_accuracy",
+    "reuse": "Reuse every data, split, model, optimization, checkpoint, budget, seed, baseline, and fixed-self-loop setting without retuning."
+  },
+  "dependencies": [
+    {
+      "path": "experiment_analyses/connected_stratification.py",
+      "sha256": "56733bfab7f0f88941613119cd1f36b9ec66d806d3d7d000d48a40e94fb04b64"
+    },
+    {
+      "path": "node_classification_utils.py",
+      "sha256": "995769cff0a0d53d6ab5dab9cf0a931a186158d8459d7039ca77c5c90dc376c0"
+    },
+    {
+      "path": "training_utils.py",
+      "sha256": "d59ac4c729911a0d24b772ab0e7309596131e9a74d3959f634e7593729377458"
+    },
+    {
+      "path": "main_accuracy.py",
+      "sha256": "64ed7a5471a5ea6caf483c87ce85d2c4b47eb03ddfe330e22a776f886221a8f4"
+    },
+    {
+      "path": "models_sparse.py",
+      "sha256": "a97024d527d21a56e03b253a554865ac2d0c7089d2efc3e4787189bdea986828"
+    },
+    {
+      "path": "layers.py",
+      "sha256": "d09655aed16224b277011e3e4bb39065b3e7bf8ed3a8c4682bc3390a17d9bb0a"
+    },
+    {
+      "path": "experiment_specs/main_accuracy.json",
+      "sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8"
+    },
+    {
+      "path": "experiment_specs/main_selected_hyperparameters.json",
+      "sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4"
+    }
+  ],
+  "datasets": [
+    "pokec",
+    "twitch"
+  ],
+  "display_names": {
+    "pokec": "Pokec",
+    "twitch": "Twitch"
+  },
+  "groups": {
+    "definition_stage": "Original hypergraph before sparsification and before adding fixed singleton self-loops.",
+    "connected": "Nodes with original incidence degree greater than zero.",
+    "isolated": "Nodes with original incidence degree equal to zero.",
+    "comparison_rule": "Intersect each fixed group with the common test split; compare EHGNN-F and Random-Fixed on identical node indices."
+  },
+  "evaluation": {
+    "methods": [
+      "ehgnnf",
+      "random"
+    ],
+    "budgets": [
+      0.1,
+      0.2,
+      0.3,
+      0.5
+    ],
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "primary_metrics": [
+      "connected-node test accuracy",
+      "isolated-node test accuracy",
+      "paired EHGNN-F minus Random-Fixed difference"
+    ],
+    "secondary_metrics": [
+      "overall test accuracy",
+      "fraction of originally connected nodes retaining at least one selected incidence"
+    ],
+    "statistical_reporting": "Two-sided paired t confidence intervals and p-values; Holm correction across the 16 dataset-budget-group comparisons."
+  },
+  "integrity_checks": {
+    "exact_budget": "Every method retains K=max(1,floor(rho*t)) original incidences.",
+    "subgroup_reconstruction": "The test-count-weighted connected and isolated accuracies must reconstruct overall test accuracy within 1e-5 percentage points.",
+    "aggregate_reproduction": "Report the maximum per-run aggregate test-accuracy difference from the source results."
+  },
+  "interpretation": {
+    "no_result_selection": "Report both groups, both datasets, every budget, and all ten seeds irrespective of outcome.",
+    "scope": "This stratification explains where a method difference occurs; it does not replace the full-test-set comparison or justify removing isolated nodes.",
+    "claim_rule": "Use significance language only for Holm-adjusted p<0.05; otherwise report the effect descriptively."
+  }
+}

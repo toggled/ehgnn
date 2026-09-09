@@ -1,0 +1,60 @@
+{
+  "protocol_version": "mlp-selected-hyperparameters-v1",
+  "selected_by_dataset": {
+    "actor": {
+      "config_index": 6,
+      "dropout": 0.5,
+      "hidden": 256,
+      "learning_rate": 0.001,
+      "mean_val_accuracy": 84.97825860977173,
+      "std_val_accuracy": 0.07104857955985673,
+      "weight_decay": 0.0
+    },
+    "coauthor_dblp": {
+      "config_index": 6,
+      "dropout": 0.5,
+      "hidden": 256,
+      "learning_rate": 0.001,
+      "mean_val_accuracy": 85.02663771311443,
+      "std_val_accuracy": 0.07687491592879224,
+      "weight_decay": 0.0
+    },
+    "pokec": {
+      "config_index": 2,
+      "dropout": 0.5,
+      "hidden": 256,
+      "learning_rate": 0.0005,
+      "mean_val_accuracy": 58.90459815661112,
+      "std_val_accuracy": 0.030799418146891303,
+      "weight_decay": 0.0
+    },
+    "twitch": {
+      "config_index": 12,
+      "dropout": 0.2,
+      "hidden": 512,
+      "learning_rate": 0.001,
+      "mean_val_accuracy": 52.70838340123495,
+      "std_val_accuracy": 0.26742379486595824,
+      "weight_decay": 0.0
+    },
+    "walmart-trips": {
+      "config_index": 9,
+      "dropout": 0.2,
+      "hidden": 512,
+      "learning_rate": 0.0005,
+      "mean_val_accuracy": 45.857903361320496,
+      "std_val_accuracy": 0.009369480940075598,
+      "weight_decay": 0.0005
+    },
+    "yelp": {
+      "config_index": 11,
+      "dropout": 0.5,
+      "hidden": 512,
+      "learning_rate": 0.0005,
+      "mean_val_accuracy": 32.16434121131897,
+      "std_val_accuracy": 0.095333899110573,
+      "weight_decay": 0.0005
+    }
+  },
+  "selection_metric": "mean validation accuracy"
+}

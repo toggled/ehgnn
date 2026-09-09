@@ -1,0 +1,114 @@
+{
+  "protocol_version": "random-resampled-v1",
+  "status": "fixed",
+  "output_root": ".work/random_resampled",
+  "dependencies": {
+    "core_protocol": "experiment_specs/main_accuracy.json",
+    "core_protocol_sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8",
+    "core_frozen_config": "experiment_specs/main_selected_hyperparameters.json",
+    "core_frozen_config_sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4",
+    "scale_protocol": "experiment_specs/large_dataset_accuracy.json",
+    "scale_protocol_sha256": "d9a224fff0997856cf81d6596787fb53f95765bd62aec83059cc9de16a2b8cfd"
+  },
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11
+  },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "model_mode": "random",
+    "training_mask": "At every full-batch epoch, draw a fresh uniform subset of exactly K=max(1,floor(rho*t)) original incidences.",
+    "validation_and_test_mask": "Generate one separate fixed uniform exact-K mask before training and use it for every validation checkpoint and final test evaluation.",
+    "checkpoint_metric": "validation cross-entropy on the fixed evaluation mask"
+  },
+  "random_streams": {
+    "model_and_dropout_seed": "model seed",
+    "training_mask_seed": "410000 + model seed",
+    "evaluation_mask_seed": "310000 + model seed",
+    "independence": "Dedicated torch.Generator instances sample training and evaluation masks without advancing the global model/dropout RNG."
+  },
+  "evaluation": {
+    "budgets": [
+      0.1,
+      0.2,
+      0.3,
+      0.5
+    ],
+    "model_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "comparators": [
+      "EHGNN-F",
+      "Random-Fixed"
+    ],
+    "metrics": [
+      "accuracy",
+      "macro_f1",
+      "balanced_accuracy",
+      "per_class_recall"
+    ]
+  },
+  "statistics": {
+    "primary_family": "EHGNN-F versus Random-Resampled across 6 datasets x 4 budgets = 24 paired comparisons",
+    "secondary_family": "Random-Resampled versus Random-Fixed across the same 24 cells",
+    "test": "two-sided paired Wilcoxon signed-rank",
+    "interval": "paired 95% t interval",
+    "multiplicity": "Holm correction separately within each declared 24-cell family",
+    "required_reporting": [
+      "paired mean difference",
+      "95% interval",
+      "wins, ties, and losses",
+      "raw and Holm-adjusted p-values"
+    ]
+  },
+  "required_audits": [
+    "exact K original incidences at every training epoch",
+    "exact K original incidences on the fixed validation/test graph",
+    "one common fixed self-loop per node",
+    "independent random streams",
+    "saved fixed evaluation-mask hash",
+    "mean consecutive-training-mask Jaccard"
+  ],
+  "required_outputs": [
+    "evaluation_runs.csv",
+    "method_summary.csv",
+    "paired_comparisons.csv",
+    "summary.md",
+    "summary_metadata.json"
+  ]
+}

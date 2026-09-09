@@ -1,0 +1,174 @@
+{
+  "protocol_version": "late-mask-analysis-v1",
+  "status": "fixed",
+  "output_root": ".work/late_mask_analysis",
+  "source_runs": {
+    "run_summary_path": ".work/rank_movement/run_summary.csv",
+    "use": "The completed epoch count determines five spaced capture epochs in the final 20% of each scorer trajectory."
+  },
+  "dependencies": [
+    {
+      "path": "experiment_analyses/mask_equivalence.py",
+      "sha256": "266295c606e70ace8e1fb2b1e92013de0da07204e3595dd686706db323d36a6c"
+    },
+    {
+      "path": "experiment_analyses/theory_invariants.py",
+      "sha256": "a8d4823f9232834f1ec54b7a91bd7a1a63f33ad7eb9307f9e3e66b43f03ac11a"
+    },
+    {
+      "path": "models_sparse.py",
+      "sha256": "a97024d527d21a56e03b253a554865ac2d0c7089d2efc3e4787189bdea986828"
+    },
+    {
+      "path": "layers.py",
+      "sha256": "d09655aed16224b277011e3e4bb39065b3e7bf8ed3a8c4682bc3390a17d9bb0a"
+    },
+    {
+      "path": "training_utils.py",
+      "sha256": "d59ac4c729911a0d24b772ab0e7309596131e9a74d3959f634e7593729377458"
+    },
+    {
+      "path": "node_classification_utils.py",
+      "sha256": "995769cff0a0d53d6ab5dab9cf0a931a186158d8459d7039ca77c5c90dc376c0"
+    },
+    {
+      "path": "experiment_controls/core_controls.py",
+      "sha256": "b70c3eeea01995837b689a9e19424fab9ddf7bc8bb3d6a7e23cb5d8057850244"
+    },
+    {
+      "path": "walmart_feature_check.py",
+      "sha256": "89cab2006eec72d2f25c779af9950117934c40289946d394371284466947b65a"
+    },
+    {
+      "path": "experiment_specs/main_accuracy.json",
+      "sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8"
+    },
+    {
+      "path": "experiment_specs/main_selected_hyperparameters.json",
+      "sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4"
+    },
+    {
+      "path": "experiment_specs/large_dataset_accuracy.json",
+      "sha256": "d9a224fff0997856cf81d6596787fb53f95765bd62aec83059cc9de16a2b8cfd"
+    }
+  ],
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11,
+    "label_access": "Training and validation labels only; all remaining labels are replaced by -1 before scorer replay or classifier retraining."
+  },
+  "common_structure": {
+    "unit": "observed incidence",
+    "budget": "K=max(1,floor(rho*t)) over the t original observed incidences",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "fixed_self_loops": "One fixed singleton self-loop per node, excluded from K, for every mask family.",
+    "deployment": "Binary exact-K subhypergraph with unit retained-incidence weights."
+  },
+  "scorer_replay": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0,
+    "mask_gradient_estimator": "selected_only",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "checkpoint_metric": "validation cross-entropy",
+    "stopping": "Replay each source trajectory for its completed epoch count."
+  },
+  "mask_generation": {
+    "late_epoch_fractions": [
+      0.8,
+      0.85,
+      0.9,
+      0.95,
+      1.0
+    ],
+    "late_family": "Five deterministic top-K masks from the specified scorer epochs.",
+    "temporal_core": "Intersection of the five late masks within one dataset-budget-source-seed trajectory.",
+    "unstable_boundary": "Union of the five late masks minus their intersection.",
+    "boundary_family": "Preserve the temporal core and uniformly sample the remaining K-|core| positions without replacement from the unstable boundary.",
+    "boundary_seed_base": 2026090200
+  },
+  "classifier_retraining": {
+    "rule": "Discard the discovery classifier, freeze each binary mask, and train a new common HGNN from scratch.",
+    "classifier_seed": 314159,
+    "paired_initialization": "Every mask in a dataset-budget cell receives the same parameter initialization and dropout random stream.",
+    "hidden": 512,
+    "dropout": 0.5,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0,
+    "mask_gradient_estimator": "selected_only",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "checkpoint_metric": "validation cross-entropy",
+    "primary_metric": "validation accuracy at the minimum-validation-loss checkpoint"
+  },
+  "evaluation": {
+    "budgets": [
+      0.1,
+      0.5
+    ],
+    "source_seeds": [
+      0,
+      1,
+      2
+    ],
+    "masks_per_family_per_source_run": 5,
+    "families": [
+      "late",
+      "boundary"
+    ],
+    "source_run_count": 36,
+    "fixed_classifier_run_count": 360,
+    "late_mask_pair_count_per_dataset_budget": 105
+  },
+  "interpretation": {
+    "accuracy_equivalence_margin_points": 0.5,
+    "material_jaccard_maximum": 0.95,
+    "late_mask_evidence": "A pair is descriptively equivalent and materially different when its Jaccard is at most 0.95 and its absolute validation-accuracy difference is at most 0.5 percentage points.",
+    "boundary_evidence": "Boundary interchangeability is supported in a cell when the source-seed mean Boundary-minus-Late difference has magnitude at most 0.5 points.",
+    "limitations": "Masks and epochs within a source trajectory are dependent. Three source seeds do not support a statistical-significance claim; report descriptive intervals and all cells."
+  },
+  "required_audits": [
+    "exact K original incidences in every mask",
+    "fixed self-loops excluded from K for every family",
+    "test labels redacted before any training",
+    "identical classifier initialization within each dataset-budget cell",
+    "fresh classifier for every fixed mask",
+    "boundary masks contain the full temporal core and no incidence outside the late-mask union",
+    "all 360 evaluation records present before aggregation"
+  ],
+  "reporting_rule": "Report all 12 dataset-budget cells, including negative and null outcomes. Do not select masks, datasets, budgets, seeds, or epochs after observing validation accuracy.",
+  "resource_policy": {
+    "hardware": "Four NVIDIA V100 32GB GPUs",
+    "resume_policy": "Completed collection bundles and evaluation records with matching specification hashes may be reused."
+  }
+}

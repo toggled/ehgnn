@@ -1,0 +1,131 @@
+{
+  "protocol_version": "large-dataset-accuracy-v1",
+  "status": "fixed",
+  "parent_accuracy_protocol": "experiment_specs/main_accuracy.json",
+  "parent_structural_baseline_protocol": "experiment_specs/structural_baselines.json",
+  "datasets": {
+    "coauthor_dblp": {
+      "display_name": "DBLP-CA",
+      "feature_policy": "native benchmark features",
+      "accuracy_inclusion": "reported in Table 2"
+    },
+    "walmart-trips": {
+      "display_name": "Walmart",
+      "feature_policy": "Deterministic AllSet feature_noise=1 construction: x_i=onehot(y_i,11)+epsilon_i with epsilon_i drawn once from a CPU torch.Generator seeded by 20260807",
+      "forbidden_feature_policy": "feature_noise=0 because it deterministically reveals every label",
+      "accuracy_inclusion": "reported in Table 2"
+    }
+  },
+  "walmart_validation_only_audit": {
+    "feature_noise": "1",
+    "feature_seed": 20260807,
+    "feature_dimension": 11,
+    "construction": "Ignore all cached Walmart feature values; load only labels and incidence structure, then set x=onehot(y,11)+epsilon using the frozen CPU generator.",
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "model_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "models": [
+      "MLP",
+      "Full HGNN"
+    ],
+    "test_metrics_forbidden": true,
+    "mlp": {
+      "architecture": "two-layer MLP with ReLU and dropout",
+      "hidden": 512,
+      "dropout": 0.5,
+      "lr": 0.0005,
+      "weight_decay": 0.0,
+      "epochs": 1000,
+      "patience": 200
+    },
+    "full_hgnn": {
+      "hidden": 512,
+      "dropout": 0.5,
+      "lr": 0.0005,
+      "weight_decay": 0.0,
+      "epochs": 1000,
+      "patience": 200,
+      "sparse_self_loop_policy": "fixed_self_loops_implicit"
+    },
+    "pass_conditions": {
+      "feature_argmax_label_agreement_below": 0.8,
+      "mean_mlp_validation_accuracy_below_percent": 85.0,
+      "maximum_seed_mlp_validation_accuracy_below_percent": 90.0,
+      "finite_metrics": true,
+      "reproducible_feature_reconstruction": true
+    },
+    "selection_prohibition": "Do not tune the feature seed, feature noise, or feature dimension. Neither MLP nor Full validation accuracy may select the construction.",
+    "feature_hash": "e4b539cb1d1113fc038ef1241fae8996d69c1ab94b5cab7d8707ca318e7881a7"
+  },
+  "fixed_budget_accuracy_evaluation": {
+    "datasets": [
+      "coauthor_dblp",
+      "walmart-trips"
+    ],
+    "methods": [
+      "Full",
+      "EHGNN-F",
+      "Random-Fixed",
+      "Degree-prefix",
+      "Spectral-prefix"
+    ],
+    "budgets": [
+      0.1,
+      0.2,
+      0.3,
+      0.5
+    ],
+    "model_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "frozen_ehgnnf_configuration": {
+      "mask_init_std": 0.01,
+      "mask_lr_multiplier": 1.0
+    },
+    "training": {
+      "hidden": 512,
+      "dropout": 0.5,
+      "lr": 0.0005,
+      "weight_decay": 0.0,
+      "epochs": 1000,
+      "patience": 200,
+      "sampling": "multinomial",
+      "sparse_self_loop_policy": "fixed_self_loops_implicit"
+    },
+    "structural_budget": "K=max(1,floor(rho*t)) original incidences",
+    "fixed_self_loops": "N fixed implicit singleton self-loops outside K for every method",
+    "test_access": "Test results are evaluated only after the feature construction and model settings are fixed."
+  },
+  "statistics": {
+    "primary_comparison": "EHGNN-F versus Random-Fixed",
+    "random_family": "6 reported datasets x 4 budgets = 24 comparisons",
+    "test": "two-sided paired Wilcoxon signed-rank",
+    "interval": "paired 95% t interval",
+    "multiplicity": "Holm correction over the final reported dataset-budget family",
+    "structural_baselines": "Report paired intervals and a separate Holm family; acknowledge the ten-seed discreteness limit if the enlarged family makes rejection unattainable."
+  }
+}

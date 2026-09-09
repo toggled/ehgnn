@@ -1,0 +1,17 @@
+diff --git a/models/models.py b/models/models.py
+index ce76073..de8af46 100644
+--- a/models/models.py
++++ b/models/models.py
+@@ -311,7 +311,11 @@ class HSL(nn.Module):
+             for i, _ in enumerate(self.V2EConvs):
+                 x = F.relu(self.V2EConvs[i](x, edge_index, self.incident_mask))
+                 if self.p1sample:
+-                    x[: edge_mask.shape[0], :] * edge_mask.unsqueeze(-1)
++                    edge_scale = torch.cat([
++                        edge_mask,
++                        edge_mask.new_ones(x.size(0) - edge_mask.size(0)),
++                    ])
++                    x = x * edge_scale.unsqueeze(-1)
+                 x = F.dropout(x, p=self.dropout, training=self.training)
+                 x = F.relu(self.E2VConvs[i](x, reversed_edge_index, self.incident_mask))
+                 x = F.dropout(x, p=self.dropout, training=self.training)

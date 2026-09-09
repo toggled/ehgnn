@@ -1,0 +1,63 @@
+{
+  "protocol_version": "main-accuracy-v1",
+  "status": "fixed",
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp"
+  ],
+  "data": {
+    "split_seed": 1,
+    "feature_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25
+  },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "lr": 0.0005,
+    "weight_decay": 0.0,
+    "epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit"
+  },
+  "evaluation": {
+    "methods": [
+      "EHGNN-F",
+      "Random-Fixed"
+    ],
+    "budgets": [
+      0.1,
+      0.2,
+      0.3,
+      0.5
+    ],
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "random_mask_seed_offset": 100000,
+    "required_outputs": [
+      "paired test-accuracy differences",
+      "95% confidence intervals",
+      "Wilcoxon and paired-t p-values",
+      "Holm-corrected dataset-budget p-values",
+      "learned-mask cross-seed Jaccard stability",
+      "forward-pass budget audit"
+    ]
+  },
+  "budget": {
+    "selected_original_incidences": "K=max(1,floor(rho*t))",
+    "fixed_self_loops": "One singleton self-loop per node is used by every method outside K."
+  }
+}

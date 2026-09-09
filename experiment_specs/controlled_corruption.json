@@ -1,0 +1,111 @@
+{
+  "protocol_version": "controlled-corruption-v1",
+  "status": "fixed",
+  "datasets": [
+    "cora",
+    "actor",
+    "pokec"
+  ],
+  "data": {
+    "split_seed": 1,
+    "feature_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25
+  },
+  "corruption": {
+    "unit": "original incidence position",
+    "operation": "Replace selected node-hyperedge incidences with unique nodes sampled to make each fully rewired carrier hyperedge approximately class-balanced. Original features and labels are unchanged.",
+    "label_usage": "Node labels are used only to construct this declared adversarial intervention. Corruption locations and labels are never supplied to a trained method.",
+    "exact_count": "B=floor(eta*M), where M is the number of original incidences",
+    "corruption_seed_offset": 260807000,
+    "nested_rate_coupling": "Within each dataset, trial, and concentration, fixed edge and incidence priorities make the corrupted position set at a lower eta a subset of every higher-eta set.",
+    "concentration_parameter": "alpha in [0,1] mixes incidence and hyperedge priorities. alpha=0 is diffuse incidence placement; alpha=1 orders whole hyperedges and therefore fills a small number of carrier hyperedges before moving to the next; alpha=0.5 is intermediate.",
+    "rate_curve": {
+      "alpha": 1.0,
+      "etas": [
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5
+      ]
+    },
+    "concentration_slice": {
+      "eta": 0.3,
+      "alphas": [
+        0.0,
+        0.5,
+        1.0
+      ]
+    },
+    "unique_cell_count_per_dataset": 8,
+    "required_diagnostics": [
+      "exact corrupted incidence count",
+      "nested corrupted position sets across the concentrated rate curve",
+      "carrier hyperedge count and fraction",
+      "mean corruption severity among carrier hyperedges",
+      "fully corrupted carrier count",
+      "corruption-count Herfindahl index and effective carrier count",
+      "incidence-weighted hyperedge label purity before and after rewiring",
+      "absence of duplicate node-hyperedge incidences"
+    ]
+  },
+  "degree_prefix": {
+    "score": "Original hyperedge cardinality after rewiring",
+    "selection": "Rank hyperedges by score and retain their incidences in stable order until exactly K positions are selected; at most one boundary hyperedge is partial."
+  },
+  "spectral_prefix": {
+    "score": "Sum of the approximate diagonal entries of the regularized inverse node Laplacian over a hyperedge's incidences",
+    "num_probes": 16,
+    "cg_tolerance": 0.00001,
+    "cg_max_iterations": 200,
+    "regularization": 0.001,
+    "score_seed": 260807,
+    "selection": "Rank hyperedges by score and retain their incidences in stable order until exactly K positions are selected; at most one boundary hyperedge is partial."
+  },
+  "ehgnn_f": {
+    "mode": "learnmask",
+    "keep_ratio": 0.5,
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0,
+    "mask_gradient_estimator": "selected_only",
+    "configuration_source": "Fixed EHGNN-F setting used for the reported evaluations; no retuning on corrupted data."
+  },
+  "evaluation": {
+    "methods": [
+      "Full",
+      "EHGNN-F",
+      "Random-Fixed",
+      "Degree-prefix",
+      "Spectral-prefix"
+    ],
+    "keep_ratio": 0.5,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "random_mask_seed_offset": 360807000,
+    "pairing": "For a dataset-cell-trial, all methods use the same corrupted graph, split, and model seed. Random-Fixed uses one fixed trial-specific incidence ordering across cells.",
+    "budget": "Every sparse method retains exactly K=max(1,floor(0.5*t)) original incidence positions. Full retains t."
+  },
+  "reporting": {
+    "accuracy": "Report mean and sample standard deviation for every method in every declared cell; no corruption level may be omitted from a plotted curve.",
+    "primary_comparison": "Paired EHGNN-F minus Random-Fixed test-accuracy difference with 95% t interval and two-sided Wilcoxon test in every dataset-cell.",
+    "multiplicity": "Holm-adjust the 24 EHGNN-F-versus-Random-Fixed cell tests as one declared family.",
+    "mechanism": "For EHGNN-F and Random-Fixed, report the fraction of rewired incidences retained and the rewired share of the retained mask.",
+    "interpretation": "The study tests a conditional mechanism. It is not an independent natural-benchmark confirmation and cannot establish universal superiority."
+  },
+  "fixed_self_loops": {
+    "count": "One per node",
+    "budget_status": "Outside the selected-incidence budget for every method"
+  }
+}

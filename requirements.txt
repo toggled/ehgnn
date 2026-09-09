@@ -1,0 +1,6 @@
+numpy==1.26.3
+scipy==1.13.1
+scikit-learn==1.6.1
+pandas==2.3.3
+matplotlib==3.9.4
+pyro-ppl==1.9.1

@@ -1,0 +1,210 @@
+{
+  "protocol_version": "hsl-v1",
+  "status": "fixed",
+  "output_root": ".work/hsl",
+  "comparison_scope": "Descriptive task-aware structure-learning baseline outside the exact-budget 24-comparison Holm family.",
+  "source": {
+    "paper": "https://www.ijcai.org/proceedings/2022/0267",
+    "public_reproduction": "https://github.com/pkualpha/HSL",
+    "commit": "00b181d6c186bf0317958df5e6cb72ecee71f616",
+    "local_patch": "The released forward computed the hyperedge-mask product without assigning it. The local checkout applies that product to original-hyperedge representations while fixing self-loop scales to one, as required by paper Equations (3) and (9). No other upstream source line is changed."
+  },
+  "dependencies": [
+    {
+      "path": "experiment_analyses/hsl_realized.py",
+      "sha256": "9c3bd7d9e3d2c4624e71f7fdad7bf06919622b8f1b9b04562c7b7e05435b7b65"
+    },
+    {
+      "path": "third_party/HSL/models/models.py",
+      "sha256": "3647c054e8b102a5c89e34fb2d1e376afe0c819247c13880cd984ee7fa9f23da"
+    },
+    {
+      "path": "third_party/HSL/models/layers.py",
+      "sha256": "7a2e8af8f65d96ef3790884c78f6a5170f33465903ebd371387ddc865c62e180"
+    },
+    {
+      "path": "experiment_controls/core_controls.py",
+      "sha256": "b70c3eeea01995837b689a9e19424fab9ddf7bc8bb3d6a7e23cb5d8057850244"
+    },
+    {
+      "path": "node_classification_utils.py",
+      "sha256": "995769cff0a0d53d6ab5dab9cf0a931a186158d8459d7039ca77c5c90dc376c0"
+    },
+    {
+      "path": "walmart_feature_check.py",
+      "sha256": "89cab2006eec72d2f25c779af9950117934c40289946d394371284466947b65a"
+    }
+  ],
+  "environment": {
+    "python": "3.9",
+    "torch": "2.0.0+cu118",
+    "torch_geometric": "2.6.1",
+    "pyro_ppl": "1.9.1"
+  },
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11,
+    "self_loop_policy": "Append one fixed singleton self-loop hyperedge per node and exclude these self-loops from both HSL samplers."
+  },
+  "model": {
+    "backbone": "HSL public reproduction using AllSet-style HSLLayer propagation",
+    "layers": 1,
+    "dropout": 0.5,
+    "normalization": "ln",
+    "heads": 4,
+    "mlp_layers": 1,
+    "p2_mlp_layers": 2,
+    "classifier_hidden": 64,
+    "classifier_layers": 2,
+    "cosine_heads": 4,
+    "p1_temperature": 0.5,
+    "p2_temperature": 0.5,
+    "p1_init_rate": 0.0,
+    "p2_init_rate": 2.0,
+    "hard_concrete_beta": 0.6,
+    "discrete_sampler": "Gumbel RelaxedBernoulliStraightThrough",
+    "contrastive_loss": "released unsupervised SupCon implementation on training nodes",
+    "contrastive_weight": 0.0001,
+    "support_addition": "released topk_add procedure without projected or chunked replacement"
+  },
+  "validation_grid": [
+    {
+      "config_id": "h064_lr1e3_p000",
+      "hidden": 64,
+      "learning_rate": 0.001,
+      "p_add": 0.0
+    },
+    {
+      "config_id": "h064_lr1e3_p002",
+      "hidden": 64,
+      "learning_rate": 0.001,
+      "p_add": 0.02
+    },
+    {
+      "config_id": "h064_lr1e4_p002",
+      "hidden": 64,
+      "learning_rate": 0.0001,
+      "p_add": 0.02
+    },
+    {
+      "config_id": "h128_lr1e3_p000",
+      "hidden": 128,
+      "learning_rate": 0.001,
+      "p_add": 0.0
+    },
+    {
+      "config_id": "h128_lr1e3_p002",
+      "hidden": 128,
+      "learning_rate": 0.001,
+      "p_add": 0.02
+    },
+    {
+      "config_id": "h128_lr1e4_p002",
+      "hidden": 128,
+      "learning_rate": 0.0001,
+      "p_add": 0.02
+    },
+    {
+      "config_id": "h256_lr1e3_p000",
+      "hidden": 256,
+      "learning_rate": 0.001,
+      "p_add": 0.0
+    },
+    {
+      "config_id": "h256_lr1e3_p002",
+      "hidden": 256,
+      "learning_rate": 0.001,
+      "p_add": 0.02
+    },
+    {
+      "config_id": "h256_lr1e4_p002",
+      "hidden": 256,
+      "learning_rate": 0.0001,
+      "p_add": 0.02
+    },
+    {
+      "config_id": "h512_lr1e3_p000",
+      "hidden": 512,
+      "learning_rate": 0.001,
+      "p_add": 0.0
+    },
+    {
+      "config_id": "h512_lr1e3_p002",
+      "hidden": 512,
+      "learning_rate": 0.001,
+      "p_add": 0.02
+    },
+    {
+      "config_id": "h512_lr1e4_p002",
+      "hidden": 512,
+      "learning_rate": 0.0001,
+      "p_add": 0.02
+    }
+  ],
+  "training": {
+    "maximum_epochs": 700,
+    "patience": 80,
+    "weight_decay": 0.0,
+    "optimizer": "Adam",
+    "checkpoint_metric": "validation cross-entropy",
+    "test_metrics_during_tuning": false
+  },
+  "random_streams": {
+    "model_and_training_seed": "model seed",
+    "evaluation_seed_base": 720000,
+    "evaluation_policy": "Restore the training RNG after each fixed-seed validation call so stochastic HSL evaluation does not perturb subsequent training."
+  },
+  "tuning": {
+    "seeds": [
+      0
+    ],
+    "selection_rule": "For each dataset, select the configuration with highest validation accuracy among complete runs. Ties prefer lower p_add, then smaller hidden width, then lower learning rate, then lexical config ID. OOM or failed configurations are ineligible and remain reported."
+  },
+  "evaluation": {
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "metrics": [
+      "accuracy",
+      "macro-F1",
+      "balanced accuracy",
+      "original support retained and removed",
+      "new support added",
+      "final and effective density",
+      "retained hyperedges",
+      "end-to-end time",
+      "peak GPU memory"
+    ],
+    "statistics": "Descriptive mean and standard deviation only; no inclusion in the exact-budget Holm family."
+  },
+  "failure_policy": "Record every OOM or failed cell. Do not substitute a smaller, projected, chunked, or simplified HSL model under the same label."
+}

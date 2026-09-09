@@ -1,0 +1,11 @@
+{
+  "protocol_version": "main-accuracy-v1",
+  "status": "fixed",
+  "protocol_hash": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8",
+  "selection_metric": "validation accuracy",
+  "selection_scope": "fixed setting used for the reported LoG evaluations",
+  "selected": {
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0
+  }
+}

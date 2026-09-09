@@ -1,0 +1,102 @@
+{
+  "protocol_version": "selected-gradients-v1",
+  "status": "fixed",
+  "output_root": ".work/selected_gradients",
+  "dependencies": [
+    {
+      "path": "experiment_analyses/selected_gradient_dynamics.py",
+      "sha256": "c1ea2f1df2cd1e52551a5d02794722ca3ee4c268496b6fa09d262343e20dbc23"
+    },
+    {
+      "path": "models_sparse.py",
+      "sha256": "a97024d527d21a56e03b253a554865ac2d0c7089d2efc3e4787189bdea986828"
+    },
+    {
+      "path": "layers.py",
+      "sha256": "d09655aed16224b277011e3e4bb39065b3e7bf8ed3a8c4682bc3390a17d9bb0a"
+    },
+    {
+      "path": "training_utils.py",
+      "sha256": "d59ac4c729911a0d24b772ab0e7309596131e9a74d3959f634e7593729377458"
+    },
+    {
+      "path": "node_classification_utils.py",
+      "sha256": "995769cff0a0d53d6ab5dab9cf0a931a186158d8459d7039ca77c5c90dc376c0"
+    },
+    {
+      "path": "experiment_controls/core_controls.py",
+      "sha256": "b70c3eeea01995837b689a9e19424fab9ddf7bc8bb3d6a7e23cb5d8057850244"
+    },
+    {
+      "path": "walmart_feature_check.py",
+      "sha256": "89cab2006eec72d2f25c779af9950117934c40289946d394371284466947b65a"
+    },
+    {
+      "path": "experiment_specs/main_accuracy.json",
+      "sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8"
+    },
+    {
+      "path": "experiment_specs/main_selected_hyperparameters.json",
+      "sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4"
+    },
+    {
+      "path": "experiment_specs/large_dataset_accuracy.json",
+      "sha256": "d9a224fff0997856cf81d6596787fb53f95765bd62aec83059cc9de16a2b8cfd"
+    }
+  ],
+  "display_names": {
+    "actor": "Actor"
+  },
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11
+  },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0,
+    "mask_gradient_estimator": "selected_only",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "checkpoint_metric": "validation cross-entropy"
+  },
+  "evaluation": {
+    "dataset": "actor",
+    "budget": 0.5,
+    "model_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "rank_group_count": 10,
+    "time_scope": "All training epochs through the validation-selected checkpoint",
+    "current_rank_measurements": [
+      "selection rate by pre-update score decile",
+      "nonzero-gradient rate by pre-update score decile",
+      "positive and negative optimizer updates among sampled incidences"
+    ],
+    "fixed_rank_measurements": [
+      "selection count and logit movement by initialization-score decile",
+      "selection count and logit movement by checkpoint-score decile",
+      "initial-to-checkpoint rank correlation",
+      "initial top-K survival relative to the exact-budget chance rate"
+    ]
+  },
+  "reporting_rule": "Report all five runs and across-run ranges. Treat the result as a descriptive Actor-50% mechanism study; do not make a significance claim or generalize it to other datasets or budgets.",
+  "interpretation": {
+    "tail_freezing": "Assess whether bottom-ranked incidences are sampled, receive task gradients, and move from initialization; do not infer this from aggregate mask overlap alone.",
+    "self_reinforcement": "Report both score-increasing and score-decreasing updates among sampled incidences; do not call the process monotone if both directions occur.",
+    "initialization_dependence": "Compare initial-to-checkpoint rank correlation and top-K survival with the 50% exact-budget chance survival rate."
+  }
+}

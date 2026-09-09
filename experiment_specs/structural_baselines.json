@@ -1,0 +1,87 @@
+{
+  "protocol_version": "structural-baselines-v1",
+  "status": "fixed",
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp"
+  ],
+  "data": {
+    "split_seed": 1,
+    "feature_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25
+  },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "lr": 0.0005,
+    "weight_decay": 0.0,
+    "epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit"
+  },
+  "evaluation": {
+    "methods": [
+      "Degree-prefix",
+      "Spectral-prefix"
+    ],
+    "reference_methods": [
+      "Full",
+      "EHGNN-F",
+      "Random-Fixed"
+    ],
+    "budgets": [
+      0.1,
+      0.2,
+      0.3,
+      0.5
+    ],
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ]
+  },
+  "budget_adapter": {
+    "unit": "original incidence",
+    "count": "K=max(1,floor(rho*t))",
+    "rule": "Rank hyperedges by the baseline score, retain their incidences in ranked-prefix order, and truncate only the boundary hyperedge to obtain exactly K incidences.",
+    "tie_break": "Original hyperedge ID, then original incidence order.",
+    "fixed_self_loops": "One fixed singleton self-loop per node is used outside K for every method."
+  },
+  "degree_prefix": {
+    "hyperedge_score": "Observed hyperedge cardinality",
+    "direction": "descending",
+    "label_access": "none"
+  },
+  "spectral_prefix": {
+    "hyperedge_score": "Sum over incident nodes of a Hutchinson-CG estimate of diag((L+reg*I)^-1) for the Zhou hypergraph Laplacian",
+    "direction": "descending",
+    "num_probes": 16,
+    "cg_tolerance": 0.00001,
+    "cg_max_iterations": 200,
+    "regularization": 0.001,
+    "score_seed": 20260807,
+    "label_access": "none",
+    "resource_policy": "Record OOM or numerical failure; do not silently replace the estimator."
+  },
+  "statistics": {
+    "pairing": "Use the same model seed as EHGNN-F",
+    "new_family": "EHGNN-F versus Degree-prefix and Spectral-prefix over 4 datasets x 4 budgets x 2 baselines",
+    "family_size": 32,
+    "interval": "paired 95% t interval",
+    "test": "two-sided Wilcoxon signed-rank",
+    "multiplicity": "Holm correction over the 32 new comparisons",
+    "random_comparison": "Use the paper's conservative 20-comparison correction for EHGNN-F versus Random-Fixed."
+  }
+}

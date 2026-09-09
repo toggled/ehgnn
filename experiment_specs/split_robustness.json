@@ -1,0 +1,138 @@
+{
+  "protocol_version": "split-robustness-v1",
+  "status": "fixed",
+  "output_root": ".work/split_robustness",
+  "dependencies": {
+    "core_protocol": "experiment_specs/main_accuracy.json",
+    "core_protocol_sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8",
+    "core_frozen_config": "experiment_specs/main_selected_hyperparameters.json",
+    "core_frozen_config_sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4",
+    "mlp_protocol": "experiment_specs/mlp_baseline.json",
+    "mlp_protocol_sha256": "eca691e2917c9b7cade9393d89b3fed9649edc4edffff590d624f5f886ec09aa",
+    "mlp_selected_hyperparameters": "experiment_specs/mlp_selected_hyperparameters.json",
+    "mlp_selected_hyperparameters_sha256": "aa519f8d48a15a258c3911e1d343eea9a9056efd83aa0b45a80a76ad4296609d",
+    "random_resampled_protocol": "experiment_specs/random_resampled.json",
+    "random_resampled_protocol_sha256": "7e0eaac07c72e4f90a91a51bb00dfe722a8b51f1b0d33a3c2748d050059640ad"
+  },
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "data": {
+    "candidate_split_seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "required_accepted_splits": 15,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "acceptance_rule": "Every class observed in the complete dataset must occur at least once in the training partition for every dataset.",
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11
+  },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "ehgnnf_mask_init_std": 0.01,
+    "ehgnnf_mask_lr_multiplier": 1.0,
+    "random_fixed_mask_seed": "100000 + model seed",
+    "random_resampled_training_mask_seed": "410000 + model seed",
+    "random_resampled_evaluation_mask_seed": "310000 + model seed",
+    "checkpoint_metric": "validation cross-entropy"
+  },
+  "evaluation": {
+    "model_seeds": [
+      0,
+      1
+    ],
+    "budgets": [
+      0.1,
+      0.5
+    ],
+    "sparse_methods": [
+      "EHGNN-F",
+      "Random-Fixed",
+      "Random-Resampled"
+    ],
+    "references": [
+      "MLP",
+      "Full"
+    ],
+    "configuration_rule": "Reuse the selected EHGNN-F configuration and the dataset-specific MLP configurations for every split; perform no per-split tuning.",
+    "metrics": [
+      "accuracy",
+      "macro_f1",
+      "balanced_accuracy",
+      "per_class_recall",
+      "best_epoch",
+      "end_to_end_seconds"
+    ],
+    "prediction_artifact": "Save test labels and predictions for every run."
+  },
+  "statistics": {
+    "inferential_unit": "data split",
+    "within_split_aggregation": "Average the two paired model-seed differences within each split.",
+    "contrasts": [
+      "EHGNN-F minus Random-Fixed",
+      "EHGNN-F minus Random-Resampled"
+    ],
+    "family_size": 24,
+    "test": "two-sided paired Wilcoxon signed-rank across 15 split-level differences",
+    "interval": "95% t interval across split-level differences",
+    "multiplicity": "Holm correction across 6 datasets x 2 budgets x 2 Random comparators",
+    "hierarchical_bootstrap": {
+      "draws": 10000,
+      "seed": 20260822,
+      "rule": "Resample splits first and the two model-seed differences within each selected split second."
+    }
+  },
+  "required_audits": [
+    "all accepted splits contain every class in training",
+    "split hashes are fixed before test evaluation",
+    "exact K original incidences for every sparse run",
+    "one common fixed self-loop per node for every sparse run",
+    "protocol, feature, label, edge-index, split, prediction, and mask hashes"
+  ],
+  "required_outputs": [
+    "split_audit.csv",
+    "split_manifest.json",
+    "evaluation_runs.csv",
+    "method_summary.csv",
+    "split_level_differences.csv",
+    "paired_comparisons.csv",
+    "summary.md",
+    "summary_metadata.json"
+  ]
+}

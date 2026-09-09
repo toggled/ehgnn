@@ -1,0 +1,115 @@
+{
+  "protocol_version": "full-retention-v1",
+  "status": "fixed",
+  "output_root": ".work/full_retention",
+  "dependencies": [
+    {
+      "path": "experiment_analyses/full_collapse.py",
+      "sha256": "e7c09b85a50e5fc43896e832e79fcea4b71a1fbc18f2ff296b6eccfe4729d869"
+    },
+    {
+      "path": "experiment_analyses/theory_invariants.py",
+      "sha256": "a8d4823f9232834f1ec54b7a91bd7a1a63f33ad7eb9307f9e3e66b43f03ac11a"
+    },
+    {
+      "path": "models_sparse.py",
+      "sha256": "a97024d527d21a56e03b253a554865ac2d0c7089d2efc3e4787189bdea986828"
+    },
+    {
+      "path": "layers.py",
+      "sha256": "d09655aed16224b277011e3e4bb39065b3e7bf8ed3a8c4682bc3390a17d9bb0a"
+    },
+    {
+      "path": "training_utils.py",
+      "sha256": "d59ac4c729911a0d24b772ab0e7309596131e9a74d3959f634e7593729377458"
+    },
+    {
+      "path": "node_classification_utils.py",
+      "sha256": "995769cff0a0d53d6ab5dab9cf0a931a186158d8459d7039ca77c5c90dc376c0"
+    },
+    {
+      "path": "experiment_controls/core_controls.py",
+      "sha256": "b70c3eeea01995837b689a9e19424fab9ddf7bc8bb3d6a7e23cb5d8057850244"
+    },
+    {
+      "path": "walmart_feature_check.py",
+      "sha256": "89cab2006eec72d2f25c779af9950117934c40289946d394371284466947b65a"
+    }
+  ],
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11
+  },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0,
+    "mask_gradient_estimator": "selected_only",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "checkpoint_metric": "validation cross-entropy"
+  },
+  "deterministic_gate": {
+    "seed": 0,
+    "hidden": 16,
+    "dropout": 0.0,
+    "atol": 1e-05,
+    "rtol": 1e-05,
+    "required_datasets": 6,
+    "memory_policy": "Compare the two paths sequentially, move Full outputs and gradients to CPU, and release its GPU state before evaluating EHGNN-F.",
+    "scope_justification": "The rho=1 path-equivalence claim concerns incidence support, weights, fixed self-loops, and convolution algebra and is independent of hidden width. Width 16 permits the invariant to be checked on every complete dataset structure without changing either path.",
+    "requirements": [
+      "all t original incidences selected",
+      "both paths expose t+N forward incidences, including N fixed self-loops",
+      "first-forward logits are allclose after loading identical classifier state",
+      "all classifier gradients are allclose under deterministic no-dropout evaluation"
+    ],
+    "continuation": "The accuracy comparison remains closed unless every dataset passes."
+  },
+  "evaluation": {
+    "budget": 1.0,
+    "model_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "methods": [
+      "EHGNN-F",
+      "Full"
+    ],
+    "primary_quantity": "paired EHGNN-F minus Full accuracy",
+    "test": "two-sided paired Wilcoxon with paired 95% t interval"
+  }
+}

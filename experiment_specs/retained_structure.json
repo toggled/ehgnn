@@ -1,0 +1,57 @@
+{
+  "protocol_version": "retained-structure-v1",
+  "status": "fixed",
+  "output_root": ".work/retained_structure",
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "budgets": [0.1, 0.2, 0.3, 0.5],
+  "seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "methods": ["EHGNN-F", "Random-Fixed"],
+  "mask_sources": {
+    "actor": ".work/main_accuracy/masks",
+    "twitch": ".work/main_accuracy/masks",
+    "pokec": ".work/main_accuracy/masks",
+    "yelp": ".work/main_accuracy/masks",
+    "coauthor_dblp": ".work/large_dataset_accuracy/masks",
+    "walmart-trips": ".work/large_dataset_accuracy/masks"
+  },
+  "data": {
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11,
+    "labels": "Labels are used only after every evaluated mask has been fixed.",
+    "singleton_original_hyperedges": "Excluded from incidence label-agreement means and reported separately."
+  },
+  "label_agreement": {
+    "definition": "For original non-singleton incidence (v,e), h(v,e) is the fraction of other nodes u in e whose label equals y_v.",
+    "weighting": "Each eligible original incidence has equal weight.",
+    "interpretation": "Descriptive association only; higher homophily is not assumed to be universally beneficial."
+  },
+  "fragmentation": {
+    "cardinality_bins": ["zero", "one", "at_least_two"],
+    "singleton_budget_fraction": "Fraction of retained original incidences whose retained hyperedge cardinality is exactly one.",
+    "ordinary_coverage": "Fraction of originally connected nodes retaining at least one selected original incidence.",
+    "relational_coverage": "Fraction of originally connected nodes retaining an incidence in a retained hyperedge of cardinality at least two."
+  },
+  "required_outputs": [
+    "seed_results.csv",
+    "method_summary.csv",
+    "paired_differences.csv",
+    "summary_10pct.md",
+    "summary_metadata.json"
+  ]
+}

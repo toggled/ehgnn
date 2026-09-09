@@ -1,0 +1,77 @@
+{
+  "protocol_version": "backbone-study-v1",
+  "status": "fixed",
+  "backbones": [
+    "AllSetTransformer",
+    "ED-HNN"
+  ],
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "methods": [
+    "Full",
+    "Random-Fixed",
+    "EHGNN-F"
+  ],
+  "model_seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_policy": "Deterministic x=onehot(y,11)+N(0,I) with CPU torch.Generator seed 20260807, matching Table 2.",
+    "all_other_features": "Use the same dataset loaders and fixed split as the main fixed-budget comparison."
+  },
+  "sparsification": {
+    "keep_ratio": 0.5,
+    "budget": "K=max(1,floor(0.5*M)) original incidences",
+    "fixed_self_loops": "N fixed singleton self-loops are added outside K for Full, Random-Fixed, and EHGNN-F.",
+    "Random-Fixed": "One uniform exact-K original-incidence mask is sampled per seed and kept fixed throughout training and evaluation.",
+    "EHGNN-F": "Free incidence logits with stochastic exact-K multinomial training and deterministic exact top-K deployment.",
+    "gradient_estimator": "Selected-only straight-through incidence weights routed through the backbone aggregation.",
+    "mask_init_mean": 0.0,
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0
+  },
+  "backbone_configuration": {
+    "hidden": 64,
+    "layers": 2,
+    "dropout": 0.5,
+    "AllSetTransformer": "PMA attention messages are multiplied by incidence-aligned STE weights after within-target softmax.",
+    "ED-HNN": "Both node-to-edge and edge-to-node means use incidence-aligned STE weighted sums divided by weighted degree."
+  },
+  "training": {
+    "optimizer": "Adam",
+    "lr": 0.001,
+    "weight_decay": 0.0,
+    "epochs": 500,
+    "patience": 100,
+    "selection_metric": "validation negative log-likelihood",
+    "checkpoint": "Detached CPU clone; test is evaluated once after restoration.",
+    "test_during_training": false
+  },
+  "reporting": {
+    "metric": "node classification accuracy",
+    "summary": "mean and sample standard deviation over five model seeds",
+    "statistical_tests": false,
+    "claim_scope": "Descriptive backbone adaptability only."
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "protocol_version": "sampler-stability-v1",
+  "status": "fixed",
+  "output_root": ".work/sampler_stability",
+  "dependencies": [
+    {
+      "path": "experiment_analyses/theory_invariants.py",
+      "sha256": "a8d4823f9232834f1ec54b7a91bd7a1a63f33ad7eb9307f9e3e66b43f03ac11a"
+    },
+    {
+      "path": "models_sparse.py",
+      "sha256": "a97024d527d21a56e03b253a554865ac2d0c7089d2efc3e4787189bdea986828"
+    },
+    {
+      "path": "layers.py",
+      "sha256": "d09655aed16224b277011e3e4bb39065b3e7bf8ed3a8c4682bc3390a17d9bb0a"
+    },
+    {
+      "path": "training_utils.py",
+      "sha256": "d59ac4c729911a0d24b772ab0e7309596131e9a74d3959f634e7593729377458"
+    },
+    {
+      "path": "node_classification_utils.py",
+      "sha256": "995769cff0a0d53d6ab5dab9cf0a931a186158d8459d7039ca77c5c90dc376c0"
+    },
+    {
+      "path": "experiment_controls/core_controls.py",
+      "sha256": "b70c3eeea01995837b689a9e19424fab9ddf7bc8bb3d6a7e23cb5d8057850244"
+    },
+    {
+      "path": "walmart_feature_check.py",
+      "sha256": "89cab2006eec72d2f25c779af9950117934c40289946d394371284466947b65a"
+    },
+    {
+      "path": "experiment_specs/main_accuracy.json",
+      "sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8"
+    },
+    {
+      "path": "experiment_specs/main_selected_hyperparameters.json",
+      "sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4"
+    },
+    {
+      "path": "experiment_specs/large_dataset_accuracy.json",
+      "sha256": "d9a224fff0997856cf81d6596787fb53f95765bd62aec83059cc9de16a2b8cfd"
+    }
+  ],
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11
+  },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0,
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "mask_init_std": 0.01,
+    "mask_lr_multiplier": 1.0,
+    "mask_gradient_estimator": "selected_only",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit",
+    "checkpoint_metric": "validation cross-entropy"
+  },
+  "evaluation": {
+    "budgets": [
+      0.1,
+      0.5
+    ],
+    "model_seeds": [
+      0,
+      1,
+      2
+    ],
+    "run_count": 36,
+    "record_frequency": "every completed optimizer step",
+    "metrics": [
+      "minimum sigmoid weight over both step endpoints",
+      "L1 and L-infinity logit update",
+      "trivial branch B0=2K",
+      "perturbation branch B1",
+      "B1/B0",
+      "deterministic top-K boundary gap",
+      "margin-premise indicator",
+      "consecutive top-K symmetric difference and Jaccard"
+    ]
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "protocol_version": "mlp-baseline-v1",
+  "status": "fixed",
+  "output_root": ".work/mlp_baseline",
+  "dependencies": {
+    "core_protocol": "experiment_specs/main_accuracy.json",
+    "core_protocol_sha256": "a3d1433300c25bcc8d409482b4e7a38adb95c302427d2a699866b0f00d6677f8",
+    "core_frozen_config": "experiment_specs/main_selected_hyperparameters.json",
+    "core_frozen_config_sha256": "e08c137ed3b84b2fa6b62e77b781690c81f5a1821eff9c757e506932055e0ec4",
+    "scale_protocol": "experiment_specs/large_dataset_accuracy.json",
+    "scale_protocol_sha256": "d9a224fff0997856cf81d6596787fb53f95765bd62aec83059cc9de16a2b8cfd",
+    "selected_hyperparameters": "experiment_specs/mlp_selected_hyperparameters.json",
+    "selected_hyperparameters_sha256": "aa519f8d48a15a258c3911e1d343eea9a9056efd83aa0b45a80a76ad4296609d"
+  },
+  "datasets": [
+    "actor",
+    "twitch",
+    "pokec",
+    "yelp",
+    "coauthor_dblp",
+    "walmart-trips"
+  ],
+  "display_names": {
+    "actor": "Actor",
+    "twitch": "Twitch",
+    "pokec": "Pokec",
+    "yelp": "Yelp",
+    "coauthor_dblp": "DBLP-CA",
+    "walmart-trips": "Walmart"
+  },
+  "data": {
+    "split_seed": 1,
+    "train_prop": 0.5,
+    "valid_prop": 0.25,
+    "walmart_feature_noise": "1",
+    "walmart_feature_seed": 20260807,
+    "walmart_feature_dimension": 11
+  },
+  "model": {
+    "layers": 2,
+    "normalization": "None",
+    "maximum_epochs": 1000,
+    "patience": 200,
+    "checkpoint_metric": "validation cross-entropy"
+  },
+  "validation_grid": {
+    "hidden": [
+      256,
+      512
+    ],
+    "learning_rate": [
+      0.0005,
+      0.001
+    ],
+    "dropout": [
+      0.2,
+      0.5
+    ],
+    "weight_decay": [
+      0.0,
+      0.0005
+    ],
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "selection_scope": "one configuration per dataset",
+    "selection_metric": "mean validation accuracy",
+    "tie_break": [
+      "lower hidden width",
+      "lower learning rate",
+      "lower dropout",
+      "lower weight decay",
+      "lower configuration index"
+    ],
+    "test_access": "Test indices and labels are replaced by -1 during every tuning run, and no tuning record may contain a test field."
+  },
+  "evaluation": {
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "metrics": [
+      "accuracy",
+      "macro_f1",
+      "balanced_accuracy",
+      "per_class_recall"
+    ],
+    "prediction_artifact": "Save test labels and predictions after selecting the dataset configuration."
+  },
+  "majority_baseline": "Predict the most frequent training label and evaluate that fixed class on validation and test nodes.",
+  "tuning_outputs": [
+    "validation_grid_runs.csv",
+    "validation_grid_summary.csv",
+    "selected_hyperparameters.json"
+  ],
+  "required_outputs": [
+    "evaluation_runs.csv",
+    "method_summary.csv",
+    "comparison_summary.csv",
+    "summary.md",
+    "summary_metadata.json"
+  ]
+}

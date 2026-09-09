@@ -1,0 +1,19 @@
+{
+  "protocol_version": "conditioned-scorer-selection-v1",
+  "status": "fixed",
+  "study_hash": "f5c8a5d69bb7702911b6031b33265369f8a96ae6d95e3c3c74210eabf4086abc",
+  "selection_scope": "one configuration per variant across the four validation datasets",
+  "variants": {
+    "f_cond": {
+      "reason": "At least one validation-only cell OOMed for every configuration.",
+      "status": "no_globally_feasible_configuration"
+    },
+    "f_cond_lr": {
+      "capacity": 4,
+      "config_index": 0,
+      "macro_val_acc": 55.30610034863153,
+      "mask_lr_multiplier": 1.0,
+      "status": "selected"
+    }
+  }
+}
