@@ -17,7 +17,12 @@ sys.path.insert(0, str(ROOT))
 from check_data import NODE_FILES  # noqa: E402
 
 
-ARCHIVE_SHA256 = "092271df6841226eed6da31dc84ac463b64379ed5a40ff4b11885b44cc448f50"
+ARCHIVE_SHA256 = {
+    "8cdaa9f4f9a1e3dabd42bb34575e27bb8fffe6f74efeda7849636cbc2818eac5":
+        "minimal 23-file archive",
+    "092271df6841226eed6da31dc84ac463b64379ed5a40ff4b11885b44cc448f50":
+        "legacy full archive",
+}
 
 
 def sha256(path: Path) -> str:
@@ -48,10 +53,14 @@ def main() -> None:
         raise FileNotFoundError(args.archive)
     if not args.skip_hash_check:
         observed = sha256(args.archive)
-        if observed != ARCHIVE_SHA256:
+        archive_kind = ARCHIVE_SHA256.get(observed)
+        if archive_kind is None:
+            expected = ", ".join(ARCHIVE_SHA256)
             raise RuntimeError(
-                f"Archive SHA-256 mismatch: observed {observed}, expected {ARCHIVE_SHA256}"
+                f"Archive SHA-256 mismatch: observed {observed}, "
+                f"expected one of {expected}"
             )
+        print(f"Verified {archive_kind} SHA-256.")
 
     with zipfile.ZipFile(args.archive) as archive:
         names = set(archive.namelist())

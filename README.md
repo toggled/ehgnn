@@ -30,19 +30,21 @@ python -m pip install -r requirements.txt
 
 ## Data
 
-Download `data.zip` from the project
-[data link](https://drive.google.com/open?id=1-wyCTVXXMvxieJvFR_9-G5w3c8dTfuSG&usp=drive_fs).
-The linked archive is 236.7 MiB; extracting every dataset in it uses 2.19 GiB.
-Only 23 files, totaling 121.8 MiB, are needed for this paper. Extract just
-those files with:
+The repository includes `data/data.zip`, a 33.5 MiB archive containing
+exactly the 23 files needed for this paper (121.8 MiB extracted). Extract them
+with:
 
 ```bash
-python scripts/extract_node_data.py ~/Downloads/data.zip
+python scripts/extract_node_data.py data/data.zip
 ```
 
-The expected archive SHA-256 is
-`092271df6841226eed6da31dc84ac463b64379ed5a40ff4b11885b44cc448f50`.
-The extraction command verifies this checksum and creates these paths:
+The minimal archive SHA-256 is
+`8cdaa9f4f9a1e3dabd42bb34575e27bb8fffe6f74efeda7849636cbc2818eac5`.
+For a smooth transition, the extractor also accepts the former 236.7 MiB,
+399-member archive with SHA-256
+`092271df6841226eed6da31dc84ac463b64379ed5a40ff4b11885b44cc448f50`;
+the 23 required members are byte-for-byte identical. The extraction command
+verifies the archive checksum and creates these paths:
 
 ```text
 data/hetero/{actor,twitch,pokec}/
@@ -52,14 +54,27 @@ data/AllSet_all_raw_data/walmart-trips/
 data/AllSet_all_raw_data/cocitation/cora/
 ```
 
-The remaining files in the archive are not used by the LoG experiments.
+No other node-classification files are required by the experiments.
 
-For the hyperedge-prediction experiment, place the original Hyper-SAGNN
-`train_data.npz` and `test_data.npz` files under:
+For the hyperedge-prediction experiment, fetch the six required files from the
+original [Hyper-SAGNN repository](https://github.com/ma-compbio/Hyper-SAGNN)
+at pinned commit `69f2fbe21c455aca084497fb2d26a8207a95decd`:
+
+```bash
+python scripts/fetch_hypersagnn_data.py
+```
+
+The script downloads only 8.7 MiB, verifies a separate SHA-256 checksum for
+every file, and creates:
 
 ```text
 Hyper-SAGNN-master/data/{wordnet,drug,MovieLens}/
 ```
+
+The upstream Hyper-SAGNN README attributes these datasets to
+[DHNE](https://github.com/tadpole/DHNE). To use an existing checkout of the
+pinned Hyper-SAGNN commit instead of downloading, see
+`python scripts/fetch_hypersagnn_data.py --help`.
 
 Check the required files before running experiments:
 

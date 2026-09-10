@@ -1,7 +1,8 @@
 __pycache__/
 *.py[cod]
 .DS_Store
-data/
+data/*
+!data/data.zip
 Hyper-SAGNN-master/data/
 outputs/
 .work/

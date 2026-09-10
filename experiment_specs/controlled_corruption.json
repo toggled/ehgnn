@@ -12,6 +12,16 @@
     "train_prop": 0.5,
     "valid_prop": 0.25
   },
+  "training": {
+    "hidden": 512,
+    "dropout": 0.5,
+    "lr": 0.0005,
+    "weight_decay": 0.0,
+    "epochs": 1000,
+    "patience": 200,
+    "sampling": "multinomial",
+    "sparse_self_loop_policy": "fixed_self_loops_implicit"
+  },
   "corruption": {
     "unit": "original incidence position",
     "operation": "Replace selected node-hyperedge incidences with unique nodes sampled to make each fully rewired carrier hyperedge approximately class-balanced. Original features and labels are unchanged.",
