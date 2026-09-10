@@ -1,18 +1,14 @@
 # EdgeMask-HGNN
 
-This package contains the source, fixed experiment specifications, and aggregation utilities needed to reproduce the experiments in the paper: **Supervised Incidence Sparsification of Hypergraphs under Budget Constraints**
+Source codes for the paper titled: **Supervised Incidence Sparsification of
+Hypergraphs under Budget Constraints**.
 
-It contains the code and fixed settings for the datasets, methods, and
-analyses reported in the LoG paper. The selected hyperparameter values are
-included so that the reported evaluations can be run directly.
+Here we provide the experiment
+specifications, runners, and aggregation code used for the reported results. Note that, it is recommended to run all commands from the repository root.
 
-The reported node-classification
-runs were tested on Python 3.9, PyTorch 2.0.0 with CUDA 11.8, and a 32 GB NVIDIA V100.
+## Setup
 
-Run all commands from the package root. Paths beginning with `./` are relative
-to this directory.
-
-## Environment
+Tested with Python 3.9, PyTorch 2.0.0, CUDA 11.8, and 32 GB NVIDIA V100 GPU.
 
 ```bash
 conda create -n edgemask-hgnn \
@@ -28,128 +24,63 @@ python -m pip install torch-geometric==2.6.1
 python -m pip install -r requirements.txt
 ```
 
-## Data
+## Datasets
 
-The repository includes `data/data.zip`, a 33.5 MiB archive containing
-exactly the 23 files needed for this paper (121.8 MiB extracted). Extract them
-with:
+`data/data.zip` contains the node-classification datasets. Datasets for
+Hyper-SAGNN hyperedge prediction are downloaded from the original authors'
+codebase. The following commands prepare the datasets:
 
 ```bash
 python scripts/extract_node_data.py data/data.zip
-```
-
-The minimal archive SHA-256 is
-`8cdaa9f4f9a1e3dabd42bb34575e27bb8fffe6f74efeda7849636cbc2818eac5`.
-For a smooth transition, the extractor also accepts the former 236.7 MiB,
-399-member archive with SHA-256
-`092271df6841226eed6da31dc84ac463b64379ed5a40ff4b11885b44cc448f50`;
-the 23 required members are byte-for-byte identical. The extraction command
-verifies the archive checksum and creates these paths:
-
-```text
-data/hetero/{actor,twitch,pokec}/
-data/AllSet_all_raw_data/yelp/
-data/AllSet_all_raw_data/coauthorship/dblp/
-data/AllSet_all_raw_data/walmart-trips/
-data/AllSet_all_raw_data/cocitation/cora/
-```
-
-No other node-classification files are required by the experiments.
-
-For the hyperedge-prediction experiment, fetch the six required files from the
-original [Hyper-SAGNN repository](https://github.com/ma-compbio/Hyper-SAGNN)
-at pinned commit `69f2fbe21c455aca084497fb2d26a8207a95decd`:
-
-```bash
 python scripts/fetch_hypersagnn_data.py
+python check_data.py --scope all
 ```
 
-The script downloads only 8.7 MiB, verifies a separate SHA-256 checksum for
-every file, and creates:
+The Hyper-SAGNN downloader is pinned to upstream commit
+[`69f2fbe`](https://github.com/ma-compbio/Hyper-SAGNN/commit/69f2fbe21c455aca084497fb2d26a8207a95decd)
+and verifies every downloaded file. Hyper-SAGNN attributes these datasets to
+[DHNE](https://github.com/tadpole/DHNE).
 
-```text
-Hyper-SAGNN-master/data/{wordnet,drug,MovieLens}/
-```
-
-The upstream Hyper-SAGNN README attributes these datasets to
-[DHNE](https://github.com/tadpole/DHNE). To use an existing checkout of the
-pinned Hyper-SAGNN commit instead of downloading, see
-`python scripts/fetch_hypersagnn_data.py --help`.
-
-Check the required files before running experiments:
+Generate the dataset statistics in Table 1 with:
 
 ```bash
-python check_data.py --scope all
 python dataset_statistics.py
 ```
 
-`dataset_statistics.py` regenerates the counts and hyperedge-homophily values
-reported in Table 1.
+## Quick Check
 
-## Run One Model
-
-`run_model.py` runs one seed using the paper's split, hyperparameters,
-early-stopping rule, exact budget, and fixed self-loop convention. Results are
-written to `outputs/single_runs/` unless `--output` is supplied.
+Run one EHGNN-F seed on Actor:
 
 ```bash
-# EHGNN-F
 python run_model.py --model ehgnn-f --dataset actor --budget 0.5 --seed 0
-
-# Exact-budget controls
-python run_model.py --model random-fixed --dataset actor --budget 0.5 --seed 0
-python run_model.py --model random-resampled --dataset actor --budget 0.5 --seed 0
-python run_model.py --model cardinality --dataset actor --budget 0.5 --seed 0
-python run_model.py --model laplacian-proxy --dataset actor --budget 0.5 --seed 0
-
-# Full-retention and feature-only references
-python run_model.py --model full --dataset actor --seed 0
-python run_model.py --model mlp --dataset actor --seed 0
-python run_model.py --model majority --dataset actor --seed 0 --device cpu
 ```
 
-Valid node-classification datasets are `actor`, `twitch`, `pokec`, `yelp`,
-`coauthor_dblp`, and `walmart-trips`. Valid sparse budgets are `0.1`, `0.2`,
-`0.3`, and `0.5`.
+Outputs are written under `outputs/single_runs/`. Run
+`python run_model.py --help` for the available models, datasets, and budgets.
 
-## Main Tables
+## Main Results
 
-Run all cells for Tables 2--4 with:
+### Tables 2--4 and mask analyses
 
 ```bash
 DEVICE=cuda:0 bash scripts/run_core_tables.sh
-```
-
-The script writes the table inputs to:
-
-| Result | Output |
-|---|---|
-| Table 2, Actor--Yelp | `./outputs/tables/table_2/actor_through_yelp.csv` |
-| Table 2, DBLP-CA and Walmart | `./outputs/tables/table_2/dblp_ca_and_walmart.csv` |
-| Table 2, six-dataset tests | `./outputs/tables/table_2/six_dataset_paired_comparisons.csv` |
-| Table 3, Random-Resampled | `./outputs/tables/table_3/method_summary.csv` |
-| Table 4, MLP and majority | `./outputs/tables/table_4/method_summary.csv` |
-
-`python run_experiment.py --help` lists the supplementary analyses available
-through the common entry point.
-
-After the core runs, regenerate the score and mask analyses with:
-
-```bash
 python summarize_mask_movement.py
 python run_experiment.py retained-structure
 ```
 
-These commands produce the score/ranking, effective-density, and retained
-multi-node-structure summaries from the saved masks.
+These commands generate the main accuracy comparisons and the saved-mask
+analyses used in Tables 10--12.
 
-## Additional Models
+### Table 5 and Figure 2
 
-### HSL and HERALD (Table 7)
+Run the core tables and controlled-corruption experiment first, then:
 
-The package does not redistribute these repositories. Fetch the exact upstream
-revisions and apply the documented HSL forward-mask correction, then run their
-validation selection and ten-seed evaluations:
+```bash
+python runtime_study.py --stage run --device cuda:0
+python runtime_study.py --stage summarize
+```
+
+### Table 7: HSL and HERALD
 
 ```bash
 bash scripts/fetch_third_party.sh
@@ -163,143 +94,93 @@ python run_experiment.py herald tune --device cuda:0
 python run_experiment.py herald freeze-selection
 python run_experiment.py herald evaluate --device cuda:0
 python run_experiment.py task-aware-summary
-python collect_outputs.py
 ```
 
-The final collection step writes the combined task-aware results to
-`./outputs/tables/table_7/task_aware_baselines.csv`.
+The fetch script pins both upstream repositories and applies the documented HSL
+forward-mask correction.
 
-### Alternative Scorers (Table 15)
-
-Run the main-table workflow first; its EHGNN-F and Random-Fixed records are
-the references used in this summary.
+### Tables 13--14: controlled corruption
 
 ```bash
-python conditioned_scorer_study.py evaluate --variants f_cond f_cond_lr --device cuda:0
-python conditioned_scorer_study.py summarize --variants f_cond f_cond_lr
+python run_experiment.py controlled-corruption --stage prepare
+python run_experiment.py controlled-corruption --stage evaluate --device cuda:0
+python run_experiment.py controlled-corruption --stage summarize
 ```
 
-This reproduces EHGNN-F, the low-rank conditioned scorer, the direct
-full-matrix feasibility outcomes, and their Random-Fixed reference using the
-selected configuration bundled in `experiment_specs/conditioned_scorer_selection.json`.
-To repeat validation selection itself, run `tune` followed by `select`, then
-pass the generated `.work/conditioned_scorers/frozen_config.json` with
-`--frozen-config` during evaluation and summarization.
+### Tables 15--17
 
-### AllSetTransformer and ED-HNN (Table 16)
+Run the core-table workflow first; Table 15 reuses its reference records.
 
 ```bash
+# Table 15: conditioned scorers
+python conditioned_scorer_study.py evaluate \
+  --variants f_cond f_cond_lr --device cuda:0
+python conditioned_scorer_study.py summarize \
+  --variants f_cond f_cond_lr
+
+# Table 16: AllSetTransformer and ED-HNN
 python backbone_study.py --device cuda:0
 python backbone_study.py --summarize
-```
 
-Use `--backbones`, `--datasets`, `--methods`, and `--seeds` to run an individual
-cell. The method names in the specification are `Full`, `Random-Fixed`, and
-`EHGNN-F`.
-
-```bash
-python backbone_study.py \
-  --backbones AllSetTransformer --datasets actor \
-  --methods EHGNN-F --seeds 0 --device cuda:0
-```
-
-### Hyper-SAGNN Hyperedge Prediction (Table 17)
-
-```bash
+# Table 17: Hyper-SAGNN hyperedge prediction
 python hyperedge_prediction.py --device cuda:0
 python hyperedge_prediction.py --summarize
 ```
 
-For one cell, for example:
+## Remaining Analyses
 
 ```bash
-python hyperedge_prediction.py \
-  --datasets wordnet --methods EHGNN-F --seeds 0 --device cuda:0
-```
-
-Valid methods are `Hyper-SAGNN`, `FullContext`, `Random-Fixed`, and `EHGNN-F`.
-
-## Other Reported Analyses
-
-The following commands reproduce the remaining experimental and theory
-appendix results. Each command uses its corresponding fixed experiment
-specification by default.
-
-For scripts that accept it, `--stage` selects the experiment phase, such as
-preparation, evaluation, or aggregation, so completed phases need not be rerun.
-
-```bash
-# Table 8: robustness over 15 independently generated splits
-python run_experiment.py split-robustness audit-splits
-python run_experiment.py split-robustness evaluate --device cuda:0
-python run_experiment.py split-robustness summarize
-
-# Table 9: connected and isolated test-node analysis
-python run_experiment.py connected-nodes run --device cuda:0
-python run_experiment.py connected-nodes summarize
-
-# Selected-gradient exposure reported with Table 12
-python run_experiment.py selected-gradients run --device cuda:0
-python run_experiment.py selected-gradients aggregate
-
-# Tables 13--14 and Figure 2(a): controlled corruption
-python run_experiment.py controlled-corruption --stage prepare
-python run_experiment.py controlled-corruption --stage evaluate --device cuda:0
-python run_experiment.py controlled-corruption --stage summarize
-
-# Table 6 and deterministic top-K behavior analysis
+# Table 6: sampler stability and deterministic top-K behavior
 python run_experiment.py sampler-stability run --device cuda:0
 python run_experiment.py sampler-stability summarize
 python run_experiment.py rank-movement run --device cuda:0
 python run_experiment.py rank-movement summarize
 
-# Late-mask analysis reported with Table 12; run the rank-movement commands first
+# Table 8: robustness over 15 splits
+python run_experiment.py split-robustness audit-splits
+python run_experiment.py split-robustness evaluate --device cuda:0
+python run_experiment.py split-robustness summarize
+
+# Table 9: connected and isolated test nodes
+python run_experiment.py connected-nodes run --device cuda:0
+python run_experiment.py connected-nodes summarize
+
+# Selected-gradient and late-mask analyses for Table 12
+python run_experiment.py selected-gradients run --device cuda:0
+python run_experiment.py selected-gradients aggregate
 python run_experiment.py late-mask-analysis collect --device cuda:0
 python run_experiment.py late-mask-analysis evaluate --device cuda:0
 python run_experiment.py late-mask-analysis summarize
 
-# Exact equivalence at full retention
+# Appendix checks
 python run_experiment.py full-retention-check gate --device cuda:0
 python run_experiment.py full-retention-check aggregate
-
-# Walmart feature sanity check reported in the experimental appendix
 python walmart_feature_check.py run --device cuda:0
 python walmart_feature_check.py summarize
 ```
 
-The saved-mask commands following the core runs produce Tables 10--12.
+Use `python run_experiment.py --help` and each script's `--help` option to run
+smaller subsets or resume individual phases.
 
-The Table 5 and Figure 2 runtime study requires the completed core accuracy
-matrix and controlled-corruption summary:
-
-```bash
-python runtime_study.py --stage run --device cuda:0
-python runtime_study.py --stage summarize
-```
-
-## Collect Outputs
-
-The main-table script collects Tables 2--4 automatically. After running any
-additional experiments, collect the available table inputs, figures, and final
-analysis summaries with:
+## Collecting the Outputs
 
 ```bash
 python collect_outputs.py
+python collect_outputs.py --require-complete
 ```
 
-The command writes the collected files and a checksum manifest under
-`./outputs/`. After running the complete experiment suite, add
-`--require-complete` to verify that every expected output is present.
+The first command collects available tables, figures, summaries, and their
+checksums under `outputs/`. Run `--require-complete` only after the full suite;
+it fails if any expected deliverable is missing.
 
-## Reproducibility Notes
+## Reproducibility Details
 
-- Validation accuracy selects hyperparameters and checkpoints. Test results are evaluated only after selection.
-- `K = floor(rho * t)` counts selected original incidences. Every sparse method
-  receives the same fixed self-loops outside this budget.
+- Fixed settings are stored under `experiment_specs/`.
+- Validation accuracy selects hyperparameters and checkpoints; test results are
+  evaluated only after selection.
+- For sparse methods, `K = floor(rho * t)` counts selected original incidences.
+  Fixed self-loops are outside this budget.
 - Random-Fixed uses mask seed `100000 + model seed`. Random-Resampled uses a
-  separate fixed evaluation mask and a deterministic training-mask stream.
-- The runners save masks, per-seed JSON records, aggregate CSV files, and
-  hashes of the experiment specifications. They do not require pretrained
-  checkpoints.
-- GPU kernels and library builds can introduce small floating-point variation;
-  use the listed versions and hardware class for the closest reproduction.
+  deterministic training-mask stream and a separate fixed evaluation mask.
+- GPU kernels can cause small floating-point variation. Use the listed software
+  versions and hardware class for the closest reproduction.
